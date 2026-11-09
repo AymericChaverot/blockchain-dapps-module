@@ -1,0 +1,42 @@
+{
+  "name": "sitepass",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SitePass - decentralized verification and revocation of safety clearances for sensitive construction sites (Base Sepolia).",
+  "type": "module",
+  "packageManager": "pnpm@10.34.7",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n chain,deploy,web -c yellow,cyan,magenta \"pnpm chain\" \"wait-on -t 60000 tcp:127.0.0.1:8545 && pnpm deploy:local && pnpm web:local\"",
+    "chain": "pnpm --filter @sitepass/contracts node",
+    "compile": "pnpm --filter @sitepass/contracts compile",
+    "test": "pnpm --filter @sitepass/contracts test",
+    "test:solidity": "pnpm --filter @sitepass/contracts test:solidity",
+    "test:nodejs": "pnpm --filter @sitepass/contracts test:nodejs",
+    "coverage": "pnpm --filter @sitepass/contracts coverage",
+    "export:abi": "pnpm --filter @sitepass/contracts export:abi",
+    "deploy:local": "pnpm --filter @sitepass/contracts deploy:local",
+    "deploy:base-sepolia": "pnpm --filter @sitepass/contracts deploy:base-sepolia",
+    "seed:local": "pnpm --filter @sitepass/contracts seed:local",
+    "seed:base-sepolia": "pnpm --filter @sitepass/contracts seed:base-sepolia",
+    "demo:failures:local": "pnpm --filter @sitepass/contracts demo:failures:local",
+    "demo:failures:base-sepolia": "pnpm --filter @sitepass/contracts demo:failures:base-sepolia",
+    "verify:base-sepolia": "pnpm --filter @sitepass/contracts verify:base-sepolia",
+    "web": "pnpm --filter @sitepass/web dev",
+    "web:local": "pnpm --filter @sitepass/web dev --mode localhost",
+    "web:base-sepolia": "pnpm --filter @sitepass/web dev --mode baseSepolia",
+    "web:mobile": "pnpm --filter @sitepass/web dev --mode localhost --host",
+    "dev:mobile": "concurrently -k -n chain,deploy,web -c yellow,cyan,magenta \"pnpm chain\" \"wait-on -t 60000 tcp:127.0.0.1:8545 && pnpm deploy:local && pnpm web:mobile\"",
+    "web:build": "pnpm --filter @sitepass/web build",
+    "web:preview": "pnpm --filter @sitepass/web preview",
+    "typecheck": "pnpm -r typecheck",
+    "env:init": "pnpm --filter @sitepass/contracts env:init",
+    "env:keys": "pnpm --filter @sitepass/contracts env:init --generate-keys"
+  },
+  "devDependencies": {
+    "concurrently": "9.2.1",
+    "wait-on": "8.0.4"
+  }
+}

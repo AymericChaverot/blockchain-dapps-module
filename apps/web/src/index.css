@@ -1,0 +1,148 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "@fontsource-variable/inter";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * SitePass design tokens.
+ * Institutional palette: ink navy surfaces, a single "trust blue" accent and
+ * restrained status colors. Status colors are only used for status meaning.
+ */
+:root {
+  --radius: 0.5rem;
+
+  --background: oklch(0.982 0.003 255);
+  --foreground: oklch(0.22 0.025 262);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.22 0.025 262);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.22 0.025 262);
+  --primary: oklch(0.47 0.15 262);
+  --primary-foreground: oklch(0.985 0.005 255);
+  --secondary: oklch(0.955 0.007 255);
+  --secondary-foreground: oklch(0.26 0.03 262);
+  --muted: oklch(0.96 0.005 255);
+  --muted-foreground: oklch(0.52 0.025 260);
+  --accent: oklch(0.95 0.015 262);
+  --accent-foreground: oklch(0.3 0.08 262);
+  --destructive: oklch(0.55 0.2 26);
+  --border: oklch(0.915 0.008 255);
+  --input: oklch(0.89 0.01 255);
+  --ring: oklch(0.55 0.15 262);
+
+  --success: oklch(0.53 0.12 158);
+  --warning: oklch(0.6 0.13 68);
+  --suspended: oklch(0.6 0.16 45);
+  --info: oklch(0.55 0.12 240);
+
+  /* Application shell (always dark ink, in both themes). */
+  --sidebar: oklch(0.205 0.03 264);
+  --sidebar-foreground: oklch(0.93 0.008 260);
+  --sidebar-muted: oklch(0.68 0.02 260);
+  --sidebar-accent: oklch(0.27 0.035 264);
+  --sidebar-border: oklch(0.3 0.03 264);
+  --sidebar-primary: oklch(0.72 0.13 255);
+}
+
+.dark {
+  --background: oklch(0.165 0.015 264);
+  --foreground: oklch(0.94 0.006 260);
+  --card: oklch(0.205 0.018 264);
+  --card-foreground: oklch(0.94 0.006 260);
+  --popover: oklch(0.22 0.02 264);
+  --popover-foreground: oklch(0.94 0.006 260);
+  --primary: oklch(0.68 0.14 258);
+  --primary-foreground: oklch(0.17 0.02 264);
+  --secondary: oklch(0.26 0.02 264);
+  --secondary-foreground: oklch(0.94 0.006 260);
+  --muted: oklch(0.245 0.018 264);
+  --muted-foreground: oklch(0.7 0.02 260);
+  --accent: oklch(0.27 0.03 262);
+  --accent-foreground: oklch(0.94 0.006 260);
+  --destructive: oklch(0.68 0.17 24);
+  --border: oklch(1 0 0 / 9%);
+  --input: oklch(1 0 0 / 14%);
+  --ring: oklch(0.68 0.14 258);
+
+  --success: oklch(0.72 0.13 158);
+  --warning: oklch(0.8 0.13 78);
+  --suspended: oklch(0.74 0.15 50);
+  --info: oklch(0.72 0.11 240);
+
+  --sidebar: oklch(0.14 0.014 264);
+  --sidebar-foreground: oklch(0.93 0.008 260);
+  --sidebar-muted: oklch(0.64 0.02 260);
+  --sidebar-accent: oklch(0.22 0.02 264);
+  --sidebar-border: oklch(1 0 0 / 7%);
+  --sidebar-primary: oklch(0.72 0.13 255);
+}
+
+@theme inline {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-suspended: var(--suspended);
+  --color-info: var(--info);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-muted: var(--sidebar-muted);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-primary: var(--sidebar-primary);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-feature-settings:
+      "cv11" 1,
+      "ss01" 1;
+  }
+  code,
+  .font-mono {
+    @apply font-mono;
+    font-feature-settings: normal;
+  }
+  h1,
+  h2,
+  h3 {
+    @apply tracking-tight;
+  }
+}
+
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}

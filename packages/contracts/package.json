@@ -1,0 +1,38 @@
+{
+  "name": "@sitepass/contracts",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "test:solidity": "hardhat test solidity",
+    "test:nodejs": "hardhat test nodejs",
+    "coverage": "hardhat test --coverage",
+    "node": "node scripts/chain.mjs",
+    "deploy:local": "hardhat run scripts/deploy.ts --network localhost",
+    "deploy:base-sepolia": "hardhat run scripts/deploy.ts --network baseSepolia",
+    "seed:local": "hardhat run scripts/seed.ts --network localhost",
+    "seed:base-sepolia": "hardhat run scripts/seed.ts --network baseSepolia",
+    "demo:failures:local": "hardhat run scripts/demo-failures.ts --network localhost",
+    "demo:failures:base-sepolia": "hardhat run scripts/demo-failures.ts --network baseSepolia",
+    "verify:base-sepolia": "hardhat run scripts/verify.ts --network baseSepolia",
+    "export:abi": "hardhat compile && node scripts/export-abi.ts",
+    "env:init": "node scripts/setup.ts",
+    "typecheck": "hardhat compile --quiet && tsc --noEmit -p ."
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox-viem": "5.0.7",
+    "@nomicfoundation/hardhat-verify": "3.1.3",
+    "@openzeppelin/contracts": "5.5.0",
+    "@types/node": "^22.18.0",
+    "dotenv": "16.6.1",
+    "forge-std": "github:foundry-rs/forge-std#v1.10.0",
+    "hardhat": "3.18.1",
+    "typescript": "5.9.3",
+    "viem": "2.56.9"
+  },
+  "dependencies": {
+    "@sitepass/shared": "workspace:*"
+  }
+}
