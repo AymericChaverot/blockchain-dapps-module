@@ -3,7 +3,7 @@
 **Decentralized verification and revocation of professional safety clearances for sensitive construction sites
 (construction / nuclear), deployed on Base Sepolia.**
 
-Accredited training organizations (Apave, Dekra…) anchor workers' clearances on-chain. Any site guard can verify a
+Accredited training organizations (Issuer A, Issuer B…) anchor workers' clearances on-chain. Any site guard can verify a
 badge in a browser **without a wallet**: issuer, validity, revocation reason, expiry, and whether the worker's
 PDF/JSON certificate is authentic. The worker proves that they control the badge by signing a challenge (no gas).
 Only SHA-256 fingerprints reach the blockchain: no personal data.
@@ -94,8 +94,8 @@ To use MetaMask instead, import these well-known Hardhat test keys (local only, 
 | Role | Account | Private key |
 | --- | --- | --- |
 | Deployer / registry admin | `0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266` | `0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80` |
-| Issuer A (Apave demo) | `0x70997970C51812dc3A010C7d01b50e0d17dc79C8` | `0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d` |
-| Issuer B (Dekra demo) | `0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC` | `0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a` |
+| Issuer A | `0x70997970C51812dc3A010C7d01b50e0d17dc79C8` | `0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d` |
+| Issuer B | `0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC` | `0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a` |
 | Holder (worker) | `0x90F79bf6EB2c4f870365E785982E1f101E93b906` | `0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6` |
 | Attacker (not an issuer) | `0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65` | `0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a` |
 
@@ -214,7 +214,7 @@ What happens if a channel is compromised:
 
 - **Registry admin key compromised**: the attacker can accredit a fake issuer. Mitigations: multisig, public
   `IssuerAdded` events that anyone can monitor, and the DNS check (a fake issuer cannot publish a TXT record on
-  `apave.com`).
+  `issuer-a.example`).
 - **Issuer key compromised**: the admin suspends the issuer. Its credentials immediately show `ISSUER_SUSPENDED`
   (fail-closed), the suspended issuer can still revoke them one by one, and the admin can later reinstate it.
 - **Issuer domain/DNS compromised**: the registry still holds the accredited address; the verifier sees a
@@ -270,12 +270,12 @@ identifiers):
   "@context": ["https://www.w3.org/ns/credentials/v2"],
   "type": ["VerifiableCredential", "SitePassSafetyCredential"],
   "schemaVersion": "sitepass.credential.v1",
-  "issuer": { "id": "did:pkh:eip155:84532:0x…", "address": "0x…", "name": "Apave", "domain": "apave.com" },
+  "issuer": { "id": "did:pkh:eip155:84532:0x…", "address": "0x…", "name": "Issuer A", "domain": "issuer-a.example" },
   "validFrom": "2026-10-16T09:00:00.000Z",
   "validUntil": "2029-10-15T21:59:59.000Z",
   "credentialSubject": {
     "id": "did:pkh:eip155:84532:0x…", "address": "0x…",
-    "firstName": "Camille", "lastName": "Martin", "birthDate": "1991-04-12", "employer": "…",
+    "firstName": "Worker", "lastName": "Test", "birthDate": "1990-01-01", "employer": "…",
     "clearance": { "code": "NUC-PR1-CC", "label": "Radiation Protection - Level 1 (PR1-CC)", "category": "nuclear" },
     "training": { "sessionReference": "S-2026-001", "location": "…", "completedOn": "2026-10-01", "result": "Passed" }
   },
@@ -297,18 +297,18 @@ identifiers):
 
 ## Issuer identity: DNS cross-check
 
-The registry says *"the admin accredited this address as Apave, domain apave.com"*. The verifier cross-checks it
+The registry says *"the admin accredited this address as Issuer A, domain issuer-a.example"*. The verifier cross-checks it
 through an independent channel: the organization publishes
 
 ```
-_sitepass.apave.com.  TXT  "sitepass-issuer=0xIssuerAddress"
+_sitepass.issuer-a.example.  TXT  "sitepass-issuer=0xIssuerAddress"
 ```
 
 and the browser queries it over DNS-over-HTTPS (Cloudflare, then Google). Result badges: **DNS verified** /
 **DNS mismatch** / **No DNS proof** / **DNS unreachable**. The registry page shows the exact record to publish
 for each issuer (copy button).
 
-The demo issuers default to `apave.com` / `dekra.com`, which do not publish this record. That is a good way to
+The demo issuers default to `issuer-a.example` / `issuer-b.example` (reserved, unresolvable domains), which do not publish this record. That is a good way to
 show "No DNS proof" (the *"assuming the issuer address is the school's"* trap). To show a green check, set
 `ISSUER_A_DOMAIN` to a domain you control and add the TXT record before deploying.
 

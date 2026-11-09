@@ -19,7 +19,7 @@ pnpm env:keys                 # generates DEPLOYER / ISSUER_A / ISSUER_B / HOLDE
    tops up both issuers with gas.
 2. *(Recommended)* Create a Safe on Base Sepolia (<https://app.safe.global>) and set `REGISTRY_ADMIN_ADDRESS`.
 3. *(Optional, for a green DNS check)* Set `ISSUER_A_DOMAIN` to a domain you control and publish
-   `_sitepass.<domain> TXT "sitepass-issuer=<ISSUER_A address>"`. Leave `ISSUER_B_DOMAIN=dekra.com` to show the
+   `_sitepass.<domain> TXT "sitepass-issuer=<ISSUER_A address>"`. Leave `ISSUER_B_DOMAIN=issuer-b.example` to show the
    "No DNS proof" case.
 4. Set `SEED_SHORT_EXPIRY_MINUTES=5` (the expired demo badge) and `VITE_NETWORK=baseSepolia`.
 
@@ -41,8 +41,8 @@ Copy them from `packages/contracts/deployments/baseSepolia.json` and `demo/baseS
 | `IssuerRegistry` | `0x…` |
 | `SiteCredentialManager` | `0x…` |
 | Registry admin (Safe) | `0x…` |
-| Issuer A (Apave demo) | `0x…` |
-| Issuer B (Dekra demo) | `0x…` |
+| Issuer A | `0x…` |
+| Issuer B | `0x…` |
 | Holder (worker) | `0x…` |
 | Credential `valid-nuclear` (NUC-PR1-CC) | `0x…` |
 | Credential `to-revoke-live` (ELEC-B2V) | `0x…` |
@@ -83,7 +83,7 @@ The matching certificates are in `demo/baseSepolia/*.json`.
 
 *Window 2, MetaMask on **Issuer A**, page **Issue a credential** (`/issuer/new`).*
 
-1. The header card shows "Apave Formation (demo) · Accredited" and its DNS status.
+1. The header card shows "Issuer A · Accredited" and its DNS status.
 2. Fill in the form: holder = Holder address, name `Jean Dupont`, birth date, clearance
    **Radiation Protection - Level 1 (PR1-CC)**, expiry in 3 years.
 3. Point out the right panel: the JSON certificate (with its random **salt**) and its **SHA-256**, both computed
@@ -186,7 +186,7 @@ Finish with `pnpm test` (54 passing) and `pnpm coverage` (100 % lines / statemen
   keeps no power (`SiteCredentialManager` has no owner).
 - **What if an issuer is compromised?** The admin suspends it: its credentials show *Issuer suspended*
   (fail-closed); it can still revoke; it can be reinstated.
-- **How do you know `0x7099…` is really Apave?** Registry metadata plus the DNS TXT record `_sitepass.apave.com`
+- **How do you know `0x7099…` is really Issuer A?** Registry metadata plus the DNS TXT record `_sitepass.<ISSUER_A_DOMAIN>`
   over DoH. Compromising one channel is not enough.
 - **GDPR?** Only a salted SHA-256 is on-chain; the certificate is the only copy of the personal data; deleting it
   makes the hash meaningless.

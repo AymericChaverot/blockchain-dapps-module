@@ -124,7 +124,7 @@ export function buildPersonas(seed: DemoSeed | null | undefined, registryOwner?:
     },
     {
       id: "holder",
-      label: "Camille Martin",
+      label: "Worker Test",
       role: "Worker",
       description: "Holds the seeded credentials; signs proof-of-control challenges.",
       address: actors.holder,

@@ -11,8 +11,8 @@ contract IssuerRegistryTest is Test {
     IssuerRegistry internal registry;
 
     address internal admin = makeAddr("registryAdmin (Safe)");
-    address internal apave = makeAddr("Apave");
-    address internal dekra = makeAddr("Dekra");
+    address internal issuerA = makeAddr("Issuer A");
+    address internal issuerB = makeAddr("Issuer B");
     address internal attacker = makeAddr("attacker");
 
     function setUp() public {
@@ -63,20 +63,20 @@ contract IssuerRegistryTest is Test {
 
     function test_AddIssuer() public {
         vm.expectEmit(true, false, false, true, address(registry));
-        emit IssuerRegistry.IssuerAdded(apave, "Apave", "apave.com");
+        emit IssuerRegistry.IssuerAdded(issuerA, "Issuer A", "issuer-a.example");
 
         vm.prank(admin);
-        registry.addIssuer(apave, "Apave", "apave.com");
+        registry.addIssuer(issuerA, "Issuer A", "issuer-a.example");
 
-        IIssuerRegistry.Issuer memory issuer = registry.getIssuer(apave);
-        assertEq(issuer.name, "Apave");
-        assertEq(issuer.domain, "apave.com");
+        IIssuerRegistry.Issuer memory issuer = registry.getIssuer(issuerA);
+        assertEq(issuer.name, "Issuer A");
+        assertEq(issuer.domain, "issuer-a.example");
         assertTrue(issuer.registered);
         assertTrue(issuer.active);
         assertEq(issuer.registeredAt, block.timestamp);
-        assertTrue(registry.isActiveIssuer(apave));
+        assertTrue(registry.isActiveIssuer(issuerA));
         assertEq(registry.issuerCount(), 1);
-        assertEq(registry.getIssuerAccounts()[0], apave);
+        assertEq(registry.getIssuerAccounts()[0], issuerA);
     }
 
     function test_RevertWhen_NonAdminAddsIssuer() public {
@@ -89,32 +89,32 @@ contract IssuerRegistryTest is Test {
     function test_RevertWhen_AddingZeroAddress() public {
         vm.prank(admin);
         vm.expectRevert(IssuerRegistry.ZeroAddress.selector);
-        registry.addIssuer(address(0), "Apave", "apave.com");
+        registry.addIssuer(address(0), "Issuer A", "issuer-a.example");
     }
 
     function test_RevertWhen_AddingTwice() public {
         vm.startPrank(admin);
-        registry.addIssuer(apave, "Apave", "apave.com");
-        vm.expectRevert(abi.encodeWithSelector(IssuerRegistry.IssuerAlreadyRegistered.selector, apave));
-        registry.addIssuer(apave, "Apave bis", "apave.fr");
+        registry.addIssuer(issuerA, "Issuer A", "issuer-a.example");
+        vm.expectRevert(abi.encodeWithSelector(IssuerRegistry.IssuerAlreadyRegistered.selector, issuerA));
+        registry.addIssuer(issuerA, "Issuer A bis", "issuer-a-bis.example");
         vm.stopPrank();
     }
 
     function test_RevertWhen_InvalidMetadata() public {
         vm.startPrank(admin);
         vm.expectRevert(IssuerRegistry.InvalidName.selector);
-        registry.addIssuer(apave, "", "apave.com");
+        registry.addIssuer(issuerA, "", "issuer-a.example");
 
         vm.expectRevert(IssuerRegistry.InvalidDomain.selector);
-        registry.addIssuer(apave, "Apave", "");
+        registry.addIssuer(issuerA, "Issuer A", "");
 
         bytes memory longName = new bytes(101);
         vm.expectRevert(IssuerRegistry.InvalidName.selector);
-        registry.addIssuer(apave, string(longName), "apave.com");
+        registry.addIssuer(issuerA, string(longName), "issuer-a.example");
 
         bytes memory longDomain = new bytes(254);
         vm.expectRevert(IssuerRegistry.InvalidDomain.selector);
-        registry.addIssuer(apave, "Apave", string(longDomain));
+        registry.addIssuer(issuerA, "Issuer A", string(longDomain));
         vm.stopPrank();
     }
 
@@ -124,60 +124,60 @@ contract IssuerRegistryTest is Test {
 
     function test_UpdateIssuer() public {
         vm.startPrank(admin);
-        registry.addIssuer(apave, "Apave", "apave.com");
+        registry.addIssuer(issuerA, "Issuer A", "issuer-a.example");
         vm.warp(block.timestamp + 1 days);
 
         vm.expectEmit(true, false, false, true, address(registry));
-        emit IssuerRegistry.IssuerUpdated(apave, "Apave Group", "apave-group.com");
-        registry.updateIssuer(apave, "Apave Group", "apave-group.com");
+        emit IssuerRegistry.IssuerUpdated(issuerA, "Issuer A Group", "issuer-a-group.example");
+        registry.updateIssuer(issuerA, "Issuer A Group", "issuer-a-group.example");
         vm.stopPrank();
 
-        IIssuerRegistry.Issuer memory issuer = registry.getIssuer(apave);
-        assertEq(issuer.name, "Apave Group");
-        assertEq(issuer.domain, "apave-group.com");
+        IIssuerRegistry.Issuer memory issuer = registry.getIssuer(issuerA);
+        assertEq(issuer.name, "Issuer A Group");
+        assertEq(issuer.domain, "issuer-a-group.example");
         assertEq(issuer.updatedAt, block.timestamp);
         assertLt(issuer.registeredAt, issuer.updatedAt);
     }
 
     function test_RevertWhen_UpdatingUnknownIssuer() public {
         vm.prank(admin);
-        vm.expectRevert(abi.encodeWithSelector(IssuerRegistry.IssuerNotRegistered.selector, dekra));
-        registry.updateIssuer(dekra, "Dekra", "dekra.com");
+        vm.expectRevert(abi.encodeWithSelector(IssuerRegistry.IssuerNotRegistered.selector, issuerB));
+        registry.updateIssuer(issuerB, "Issuer B", "issuer-b.example");
     }
 
     function test_SuspendAndReinstateIssuer() public {
         vm.startPrank(admin);
-        registry.addIssuer(dekra, "Dekra", "dekra.com");
+        registry.addIssuer(issuerB, "Issuer B", "issuer-b.example");
 
         vm.expectEmit(true, false, false, false, address(registry));
-        emit IssuerRegistry.IssuerSuspended(dekra);
-        registry.suspendIssuer(dekra);
-        assertFalse(registry.isActiveIssuer(dekra));
+        emit IssuerRegistry.IssuerSuspended(issuerB);
+        registry.suspendIssuer(issuerB);
+        assertFalse(registry.isActiveIssuer(issuerB));
         // The record is kept: suspension is not deletion.
-        assertTrue(registry.getIssuer(dekra).registered);
-        assertEq(registry.getIssuer(dekra).name, "Dekra");
+        assertTrue(registry.getIssuer(issuerB).registered);
+        assertEq(registry.getIssuer(issuerB).name, "Issuer B");
 
-        vm.expectRevert(abi.encodeWithSelector(IssuerRegistry.IssuerAlreadySuspended.selector, dekra));
-        registry.suspendIssuer(dekra);
+        vm.expectRevert(abi.encodeWithSelector(IssuerRegistry.IssuerAlreadySuspended.selector, issuerB));
+        registry.suspendIssuer(issuerB);
 
         vm.expectEmit(true, false, false, false, address(registry));
-        emit IssuerRegistry.IssuerReinstated(dekra);
-        registry.reinstateIssuer(dekra);
-        assertTrue(registry.isActiveIssuer(dekra));
+        emit IssuerRegistry.IssuerReinstated(issuerB);
+        registry.reinstateIssuer(issuerB);
+        assertTrue(registry.isActiveIssuer(issuerB));
 
-        vm.expectRevert(abi.encodeWithSelector(IssuerRegistry.IssuerAlreadyActive.selector, dekra));
-        registry.reinstateIssuer(dekra);
+        vm.expectRevert(abi.encodeWithSelector(IssuerRegistry.IssuerAlreadyActive.selector, issuerB));
+        registry.reinstateIssuer(issuerB);
         vm.stopPrank();
     }
 
     function test_RevertWhen_NonAdminSuspends() public {
         vm.prank(admin);
-        registry.addIssuer(dekra, "Dekra", "dekra.com");
+        registry.addIssuer(issuerB, "Issuer B", "issuer-b.example");
 
         vm.prank(attacker);
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, attacker));
-        registry.suspendIssuer(dekra);
-        assertTrue(registry.isActiveIssuer(dekra));
+        registry.suspendIssuer(issuerB);
+        assertTrue(registry.isActiveIssuer(issuerB));
     }
 
     function test_UnknownAddressIsNotAnIssuer() public view {
@@ -189,6 +189,6 @@ contract IssuerRegistryTest is Test {
         vm.assume(caller != admin);
         vm.prank(caller);
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, caller));
-        registry.addIssuer(apave, "Apave", "apave.com");
+        registry.addIssuer(issuerA, "Issuer A", "issuer-a.example");
     }
 }

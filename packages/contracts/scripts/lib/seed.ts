@@ -34,10 +34,10 @@ interface SeedCredentialPlan {
 }
 
 const DEMO_HOLDER_IDENTITY = {
-  firstName: "Camille",
-  lastName: "Martin",
-  birthDate: "1991-04-12",
-  employer: "Bouygues Construction (demo)",
+  firstName: "Worker",
+  lastName: "Test",
+  birthDate: "1990-01-01",
+  employer: "Demo Construction",
 };
 
 function shortExpiryMinutes(): number {

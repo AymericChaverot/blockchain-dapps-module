@@ -79,13 +79,13 @@ function AddIssuerForm() {
       </div>
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="issuer-name">Public name</Label>
-        <Input id="issuer-name" placeholder="Apave" value={name} onChange={(event) => setName(event.target.value)} required />
+        <Input id="issuer-name" placeholder="Issuer A" value={name} onChange={(event) => setName(event.target.value)} required />
       </div>
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="issuer-domain">Reference domain</Label>
         <Input
           id="issuer-domain"
-          placeholder="apave.com"
+          placeholder="issuer-a.example"
           value={domain}
           onChange={(event) => setDomain(event.target.value)}
           required

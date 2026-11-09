@@ -76,8 +76,8 @@ export async function getContext() {
   }
 
   const issuers: { a: DemoIssuerConfig; b: DemoIssuerConfig } = {
-    a: { name: env("ISSUER_A_NAME") ?? "Apave Formation (demo)", domain: env("ISSUER_A_DOMAIN") ?? "apave.com" },
-    b: { name: env("ISSUER_B_NAME") ?? "Dekra Industrial (demo)", domain: env("ISSUER_B_DOMAIN") ?? "dekra.com" },
+    a: { name: env("ISSUER_A_NAME") ?? "Issuer A", domain: env("ISSUER_A_DOMAIN") ?? "issuer-a.example" },
+    b: { name: env("ISSUER_B_NAME") ?? "Issuer B", domain: env("ISSUER_B_DOMAIN") ?? "issuer-b.example" },
   };
 
   return {

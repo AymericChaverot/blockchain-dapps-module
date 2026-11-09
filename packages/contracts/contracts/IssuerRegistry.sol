@@ -6,7 +6,7 @@ import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {IIssuerRegistry} from "./interfaces/IIssuerRegistry.sol";
 
 /// @title IssuerRegistry
-/// @notice Whitelist of accredited training organizations (e.g. Apave, Dekra)
+/// @notice Whitelist of accredited training organizations (e.g. Issuer A, Issuer B)
 ///         allowed to issue SitePass safety credentials.
 ///
 /// @dev Governance model
@@ -63,8 +63,8 @@ contract IssuerRegistry is IIssuerRegistry, Ownable2Step {
 
     /// @notice Accredits a new training organization.
     /// @param account Address the organization will sign issuance transactions with.
-    /// @param name Public name of the organization (e.g. "Apave").
-    /// @param domain Reference domain controlled by the organization (e.g. "apave.com").
+    /// @param name Public name of the organization (e.g. "Issuer A").
+    /// @param domain Reference domain controlled by the organization (e.g. "issuer-a.example").
     function addIssuer(address account, string calldata name, string calldata domain) external onlyOwner {
         if (account == address(0)) revert ZeroAddress();
         if (_issuers[account].registered) revert IssuerAlreadyRegistered(account);

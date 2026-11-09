@@ -6,10 +6,10 @@ import { type Address, isAddressEqual } from "viem";
  * An accredited organization proves that it controls the address registered
  * on-chain by publishing a TXT record on the domain it declared:
  *
- *     _sitepass.apave.com.  TXT  "sitepass-issuer=0xIssuerAddress"
+ *     _sitepass.issuer-a.example.  TXT  "sitepass-issuer=0xIssuerAddress"
  *
- * The registry says "the admin accredited this address as Apave"; DNS says
- * "whoever runs apave.com claims this address". Both channels must be
+ * The registry says "the admin accredited this address as Issuer A"; DNS says
+ * "whoever runs issuer-a.example claims this address". Both channels must be
  * compromised to impersonate an issuer.
  */
 export const DNS_RECORD_PREFIX = "_sitepass";

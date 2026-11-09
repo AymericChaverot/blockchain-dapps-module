@@ -16,8 +16,8 @@ contract SiteCredentialManagerTest is Test {
     SiteCredentialManager internal manager;
 
     address internal admin = makeAddr("registryAdmin");
-    address internal apave = makeAddr("Apave");
-    address internal dekra = makeAddr("Dekra");
+    address internal issuerA = makeAddr("Issuer A");
+    address internal issuerB = makeAddr("Issuer B");
     address internal worker = makeAddr("worker");
     address internal otherWorker = makeAddr("otherWorker");
     address internal attacker = makeAddr("attacker");
@@ -40,8 +40,8 @@ contract SiteCredentialManagerTest is Test {
         manager = new SiteCredentialManager(registry);
 
         vm.startPrank(admin);
-        registry.addIssuer(apave, "Apave", "apave.com");
-        registry.addIssuer(dekra, "Dekra", "dekra.com");
+        registry.addIssuer(issuerA, "Issuer A", "issuer-a.example");
+        registry.addIssuer(issuerB, "Issuer B", "issuer-b.example");
         vm.stopPrank();
     }
 
@@ -56,14 +56,14 @@ contract SiteCredentialManagerTest is Test {
 
     function test_Scenario1_IssueByAccreditedIssuer() public {
         uint64 expiresAt = uint64(block.timestamp + 365 days);
-        bytes32 expectedId = manager.computeCredentialId(apave, DOC_HASH);
+        bytes32 expectedId = manager.computeCredentialId(issuerA, DOC_HASH);
 
         vm.expectEmit(true, true, true, true, address(manager));
         emit SiteCredentialManager.CredentialIssued(
-            expectedId, apave, worker, TYPE_PR1, DOC_HASH, uint64(block.timestamp), expiresAt
+            expectedId, issuerA, worker, TYPE_PR1, DOC_HASH, uint64(block.timestamp), expiresAt
         );
 
-        vm.prank(apave);
+        vm.prank(issuerA);
         bytes32 id = manager.issueCredential(worker, TYPE_PR1, DOC_HASH, expiresAt);
         assertEq(id, expectedId);
 
@@ -71,9 +71,9 @@ contract SiteCredentialManagerTest is Test {
         assertTrue(v.exists);
         assertTrue(v.isValid);
         assertEq(uint8(v.status), uint8(SiteCredentialManager.CredentialStatus.VALID));
-        assertEq(v.issuer, apave);
-        assertEq(v.issuerName, "Apave");
-        assertEq(v.issuerDomain, "apave.com");
+        assertEq(v.issuer, issuerA);
+        assertEq(v.issuerName, "Issuer A");
+        assertEq(v.issuerDomain, "issuer-a.example");
         assertTrue(v.issuerActive);
         assertEq(v.holder, worker);
         assertEq(v.credentialType, TYPE_PR1);
@@ -88,8 +88,8 @@ contract SiteCredentialManagerTest is Test {
     }
 
     function test_Scenario1_IndexesAreUpdated() public {
-        bytes32 id1 = _issue(apave, DOC_HASH, 0);
-        vm.prank(dekra);
+        bytes32 id1 = _issue(issuerA, DOC_HASH, 0);
+        vm.prank(issuerB);
         bytes32 id2 = manager.issueCredential(worker, TYPE_B2V, DOC_HASH_2, 0);
 
         bytes32[] memory byHolder = manager.getCredentialsByHolder(worker);
@@ -97,17 +97,17 @@ contract SiteCredentialManagerTest is Test {
         assertEq(byHolder[0], id1);
         assertEq(byHolder[1], id2);
 
-        assertEq(manager.getCredentialsByIssuer(apave).length, 1);
-        assertEq(manager.getCredentialsByIssuer(apave)[0], id1);
-        assertEq(manager.getCredentialsByIssuer(dekra)[0], id2);
+        assertEq(manager.getCredentialsByIssuer(issuerA).length, 1);
+        assertEq(manager.getCredentialsByIssuer(issuerA)[0], id1);
+        assertEq(manager.getCredentialsByIssuer(issuerB)[0], id2);
         assertEq(manager.getCredentialsByDocumentHash(DOC_HASH)[0], id1);
         assertEq(manager.getCredentialsByHolder(otherWorker).length, 0);
         assertEq(manager.totalCredentials(), 2);
     }
 
     function test_Scenario1_TwoIssuersCanAnchorTheSameDocument() public {
-        bytes32 id1 = _issue(apave, DOC_HASH, 0);
-        bytes32 id2 = _issue(dekra, DOC_HASH, 0);
+        bytes32 id1 = _issue(issuerA, DOC_HASH, 0);
+        bytes32 id2 = _issue(issuerB, DOC_HASH, 0);
         assertTrue(id1 != id2);
         assertEq(manager.getCredentialsByDocumentHash(DOC_HASH).length, 2);
     }
@@ -134,27 +134,27 @@ contract SiteCredentialManagerTest is Test {
 
     function test_Scenario2_RevertWhen_SuspendedIssuerIssues() public {
         vm.prank(admin);
-        registry.suspendIssuer(dekra);
+        registry.suspendIssuer(issuerB);
 
-        vm.prank(dekra);
-        vm.expectRevert(abi.encodeWithSelector(SiteCredentialManager.NotAuthorizedIssuer.selector, dekra));
+        vm.prank(issuerB);
+        vm.expectRevert(abi.encodeWithSelector(SiteCredentialManager.NotAuthorizedIssuer.selector, issuerB));
         manager.issueCredential(worker, TYPE_PR1, DOC_HASH, 0);
     }
 
     function testFuzz_Scenario2_NoOneElseCanIssue(address caller) public {
-        vm.assume(caller != apave && caller != dekra);
+        vm.assume(caller != issuerA && caller != issuerB);
         vm.prank(caller);
         vm.expectRevert(abi.encodeWithSelector(SiteCredentialManager.NotAuthorizedIssuer.selector, caller));
         manager.issueCredential(worker, TYPE_PR1, DOC_HASH, 0);
     }
 
     function test_RevertWhen_InvalidIssuanceInputs() public {
-        vm.startPrank(apave);
+        vm.startPrank(issuerA);
         vm.expectRevert(SiteCredentialManager.ZeroAddress.selector);
         manager.issueCredential(address(0), TYPE_PR1, DOC_HASH, 0);
 
-        vm.expectRevert(abi.encodeWithSelector(SiteCredentialManager.SelfIssuanceNotAllowed.selector, apave));
-        manager.issueCredential(apave, TYPE_PR1, DOC_HASH, 0);
+        vm.expectRevert(abi.encodeWithSelector(SiteCredentialManager.SelfIssuanceNotAllowed.selector, issuerA));
+        manager.issueCredential(issuerA, TYPE_PR1, DOC_HASH, 0);
 
         vm.expectRevert(SiteCredentialManager.InvalidCredentialType.selector);
         manager.issueCredential(worker, bytes32(0), DOC_HASH, 0);
@@ -165,8 +165,8 @@ contract SiteCredentialManagerTest is Test {
     }
 
     function test_RevertWhen_IssuingTheSameDocumentTwice() public {
-        bytes32 id = _issue(apave, DOC_HASH, 0);
-        vm.prank(apave);
+        bytes32 id = _issue(issuerA, DOC_HASH, 0);
+        vm.prank(issuerA);
         vm.expectRevert(abi.encodeWithSelector(SiteCredentialManager.CredentialAlreadyExists.selector, id));
         manager.issueCredential(otherWorker, TYPE_PR1, DOC_HASH, 0);
     }
@@ -181,13 +181,13 @@ contract SiteCredentialManagerTest is Test {
     // ==================================================================
 
     function test_Scenario3_RevokeByOriginalIssuer() public {
-        bytes32 id = _issue(apave, DOC_HASH, uint64(block.timestamp + 365 days));
+        bytes32 id = _issue(issuerA, DOC_HASH, uint64(block.timestamp + 365 days));
         vm.warp(block.timestamp + 10 days);
 
         vm.expectEmit(true, true, true, true, address(manager));
-        emit SiteCredentialManager.CredentialRevoked(id, apave, worker, SAFETY_BREACH, uint64(block.timestamp));
+        emit SiteCredentialManager.CredentialRevoked(id, issuerA, worker, SAFETY_BREACH, uint64(block.timestamp));
 
-        vm.prank(apave);
+        vm.prank(issuerA);
         manager.revokeCredential(id, SAFETY_BREACH);
 
         SiteCredentialManager.CredentialView memory v = manager.verifyCredential(id);
@@ -198,7 +198,7 @@ contract SiteCredentialManagerTest is Test {
         assertEq(v.revokedAt, block.timestamp);
         assertEq(v.revocationReason, SAFETY_BREACH);
         // Original data is preserved for auditability.
-        assertEq(v.issuer, apave);
+        assertEq(v.issuer, issuerA);
         assertEq(v.holder, worker);
         assertEq(v.documentHash, DOC_HASH);
         assertEq(v.credentialType, TYPE_PR1);
@@ -208,19 +208,19 @@ contract SiteCredentialManagerTest is Test {
     function test_Scenario3_AllReasonCodesAreAccepted() public {
         uint8[4] memory reasons = [SAFETY_BREACH, MEDICAL_UNFIT, EXPIRED_EARLY, FRAUDULENT_ISSUANCE];
         for (uint256 i = 0; i < reasons.length; ++i) {
-            bytes32 id = _issue(apave, keccak256(abi.encode("doc", i)), 0);
-            vm.prank(apave);
+            bytes32 id = _issue(issuerA, keccak256(abi.encode("doc", i)), 0);
+            vm.prank(issuerA);
             manager.revokeCredential(id, reasons[i]);
             assertEq(manager.verifyCredential(id).revocationReason, reasons[i]);
         }
     }
 
     function test_Scenario3_SuspendedIssuerCanStillRevoke() public {
-        bytes32 id = _issue(dekra, DOC_HASH, 0);
+        bytes32 id = _issue(issuerB, DOC_HASH, 0);
         vm.prank(admin);
-        registry.suspendIssuer(dekra);
+        registry.suspendIssuer(issuerB);
 
-        vm.prank(dekra);
+        vm.prank(issuerB);
         manager.revokeCredential(id, FRAUDULENT_ISSUANCE);
         assertTrue(manager.verifyCredential(id).isRevoked);
     }
@@ -230,16 +230,16 @@ contract SiteCredentialManagerTest is Test {
     // ==================================================================
 
     function test_Scenario4_RevertWhen_OtherIssuerRevokes() public {
-        bytes32 id = _issue(apave, DOC_HASH, 0);
+        bytes32 id = _issue(issuerA, DOC_HASH, 0);
 
-        vm.prank(dekra);
-        vm.expectRevert(abi.encodeWithSelector(SiteCredentialManager.NotCredentialIssuer.selector, id, dekra));
+        vm.prank(issuerB);
+        vm.expectRevert(abi.encodeWithSelector(SiteCredentialManager.NotCredentialIssuer.selector, id, issuerB));
         manager.revokeCredential(id, SAFETY_BREACH);
         assertTrue(manager.isCredentialValid(id));
     }
 
     function test_Scenario4_RevertWhen_AttackerRevokes() public {
-        bytes32 id = _issue(apave, DOC_HASH, 0);
+        bytes32 id = _issue(issuerA, DOC_HASH, 0);
 
         vm.prank(attacker);
         vm.expectRevert(abi.encodeWithSelector(SiteCredentialManager.NotCredentialIssuer.selector, id, attacker));
@@ -248,7 +248,7 @@ contract SiteCredentialManagerTest is Test {
     }
 
     function test_Scenario4_RevertWhen_RegistryAdminOrHolderRevokes() public {
-        bytes32 id = _issue(apave, DOC_HASH, 0);
+        bytes32 id = _issue(issuerA, DOC_HASH, 0);
 
         vm.prank(admin);
         vm.expectRevert(abi.encodeWithSelector(SiteCredentialManager.NotCredentialIssuer.selector, id, admin));
@@ -260,8 +260,8 @@ contract SiteCredentialManagerTest is Test {
     }
 
     function testFuzz_Scenario4_OnlyOriginalIssuerCanRevoke(address caller) public {
-        vm.assume(caller != apave);
-        bytes32 id = _issue(apave, DOC_HASH, 0);
+        vm.assume(caller != issuerA);
+        bytes32 id = _issue(issuerA, DOC_HASH, 0);
 
         vm.prank(caller);
         vm.expectRevert(abi.encodeWithSelector(SiteCredentialManager.NotCredentialIssuer.selector, id, caller));
@@ -269,8 +269,8 @@ contract SiteCredentialManagerTest is Test {
     }
 
     function test_RevertWhen_RevokingTwice() public {
-        bytes32 id = _issue(apave, DOC_HASH, 0);
-        vm.startPrank(apave);
+        bytes32 id = _issue(issuerA, DOC_HASH, 0);
+        vm.startPrank(issuerA);
         manager.revokeCredential(id, MEDICAL_UNFIT);
         vm.expectRevert(abi.encodeWithSelector(SiteCredentialManager.CredentialAlreadyRevoked.selector, id));
         manager.revokeCredential(id, SAFETY_BREACH);
@@ -281,15 +281,15 @@ contract SiteCredentialManagerTest is Test {
 
     function test_RevertWhen_RevokingUnknownCredential() public {
         bytes32 unknownId = keccak256("unknown");
-        vm.prank(apave);
+        vm.prank(issuerA);
         vm.expectRevert(abi.encodeWithSelector(SiteCredentialManager.CredentialNotFound.selector, unknownId));
         manager.revokeCredential(unknownId, SAFETY_BREACH);
     }
 
     function testFuzz_RevertWhen_InvalidReasonCode(uint8 reasonCode) public {
         vm.assume(reasonCode == 0 || reasonCode > FRAUDULENT_ISSUANCE);
-        bytes32 id = _issue(apave, DOC_HASH, 0);
-        vm.prank(apave);
+        bytes32 id = _issue(issuerA, DOC_HASH, 0);
+        vm.prank(issuerA);
         vm.expectRevert(abi.encodeWithSelector(SiteCredentialManager.InvalidRevocationReason.selector, reasonCode));
         manager.revokeCredential(id, reasonCode);
     }
@@ -299,14 +299,14 @@ contract SiteCredentialManagerTest is Test {
     // ==================================================================
 
     function test_Scenario5_TransferCredentialAlwaysReverts() public {
-        bytes32 id = _issue(apave, DOC_HASH, 0);
+        bytes32 id = _issue(issuerA, DOC_HASH, 0);
 
         vm.prank(worker);
         vm.expectRevert(abi.encodeWithSelector(SiteCredentialManager.CredentialNonTransferable.selector, id));
         manager.transferCredential(id, otherWorker);
 
         // Even the issuer cannot move it.
-        vm.prank(apave);
+        vm.prank(issuerA);
         vm.expectRevert(abi.encodeWithSelector(SiteCredentialManager.CredentialNonTransferable.selector, id));
         manager.transferCredential(id, otherWorker);
 
@@ -321,7 +321,7 @@ contract SiteCredentialManagerTest is Test {
     }
 
     function test_Scenario5_NoTokenTransferSelectorsExist() public {
-        bytes32 id = _issue(apave, DOC_HASH, 0);
+        bytes32 id = _issue(issuerA, DOC_HASH, 0);
         uint256 tokenId = uint256(id);
 
         bytes[] memory calls = new bytes[](7);
@@ -357,7 +357,7 @@ contract SiteCredentialManagerTest is Test {
 
     function test_Scenario6_ExpirationBoundaries() public {
         uint64 expiresAt = uint64(block.timestamp + 30 days);
-        bytes32 id = _issue(apave, DOC_HASH, expiresAt);
+        bytes32 id = _issue(issuerA, DOC_HASH, expiresAt);
 
         vm.warp(expiresAt - 1);
         SiteCredentialManager.CredentialView memory before = manager.verifyCredential(id);
@@ -375,7 +375,7 @@ contract SiteCredentialManagerTest is Test {
     }
 
     function test_Scenario6_ZeroExpirationNeverExpires() public {
-        bytes32 id = _issue(apave, DOC_HASH, 0);
+        bytes32 id = _issue(issuerA, DOC_HASH, 0);
         vm.warp(block.timestamp + 100 * 365 days);
         SiteCredentialManager.CredentialView memory v = manager.verifyCredential(id);
         assertTrue(v.isValid);
@@ -384,7 +384,7 @@ contract SiteCredentialManagerTest is Test {
 
     function test_Scenario6_RevertWhen_ExpirationNotInTheFuture() public {
         uint64 nowTs = uint64(block.timestamp);
-        vm.startPrank(apave);
+        vm.startPrank(issuerA);
         vm.expectRevert(abi.encodeWithSelector(SiteCredentialManager.InvalidExpiration.selector, nowTs, nowTs));
         manager.issueCredential(worker, TYPE_PR1, DOC_HASH, nowTs);
 
@@ -395,8 +395,8 @@ contract SiteCredentialManagerTest is Test {
 
     function test_Scenario6_RevocationTakesPrecedenceOverExpiration() public {
         uint64 expiresAt = uint64(block.timestamp + 1 days);
-        bytes32 id = _issue(apave, DOC_HASH, expiresAt);
-        vm.prank(apave);
+        bytes32 id = _issue(issuerA, DOC_HASH, expiresAt);
+        vm.prank(issuerA);
         manager.revokeCredential(id, EXPIRED_EARLY);
 
         vm.warp(expiresAt + 1);
@@ -409,7 +409,7 @@ contract SiteCredentialManagerTest is Test {
     function testFuzz_Scenario6_ExpiryIsComputedFromBlockTime(uint32 lifetime, uint32 elapsed) public {
         vm.assume(lifetime > 0);
         uint64 expiresAt = uint64(block.timestamp) + lifetime;
-        bytes32 id = _issue(apave, DOC_HASH, expiresAt);
+        bytes32 id = _issue(issuerA, DOC_HASH, expiresAt);
 
         vm.warp(block.timestamp + elapsed);
         bool shouldBeExpired = block.timestamp >= expiresAt;
@@ -434,25 +434,25 @@ contract SiteCredentialManagerTest is Test {
     }
 
     function test_SuspendingIssuerInvalidatesItsCredentials() public {
-        bytes32 id = _issue(dekra, DOC_HASH, 0);
+        bytes32 id = _issue(issuerB, DOC_HASH, 0);
 
         vm.prank(admin);
-        registry.suspendIssuer(dekra);
+        registry.suspendIssuer(issuerB);
         SiteCredentialManager.CredentialView memory v = manager.verifyCredential(id);
         assertFalse(v.isValid);
         assertFalse(v.issuerActive);
         assertEq(uint8(v.status), uint8(SiteCredentialManager.CredentialStatus.ISSUER_SUSPENDED));
-        assertEq(v.issuerName, "Dekra", "issuer identity is still displayed");
+        assertEq(v.issuerName, "Issuer B", "issuer identity is still displayed");
 
         vm.prank(admin);
-        registry.reinstateIssuer(dekra);
+        registry.reinstateIssuer(issuerB);
         assertTrue(manager.isCredentialValid(id));
     }
 
     function test_BatchVerification() public {
-        bytes32 id1 = _issue(apave, DOC_HASH, 0);
-        bytes32 id2 = _issue(apave, DOC_HASH_2, 0);
-        vm.prank(apave);
+        bytes32 id1 = _issue(issuerA, DOC_HASH, 0);
+        bytes32 id2 = _issue(issuerA, DOC_HASH_2, 0);
+        vm.prank(issuerA);
         manager.revokeCredential(id2, SAFETY_BREACH);
 
         bytes32[] memory ids = new bytes32[](3);
@@ -468,9 +468,9 @@ contract SiteCredentialManagerTest is Test {
     }
 
     function test_CredentialIdIsBoundToChainContractIssuerAndDocument() public view {
-        bytes32 id = manager.computeCredentialId(apave, DOC_HASH);
-        assertEq(id, keccak256(abi.encode(block.chainid, address(manager), apave, DOC_HASH)));
-        assertTrue(id != manager.computeCredentialId(dekra, DOC_HASH));
-        assertTrue(id != manager.computeCredentialId(apave, DOC_HASH_2));
+        bytes32 id = manager.computeCredentialId(issuerA, DOC_HASH);
+        assertEq(id, keccak256(abi.encode(block.chainid, address(manager), issuerA, DOC_HASH)));
+        assertTrue(id != manager.computeCredentialId(issuerB, DOC_HASH));
+        assertTrue(id != manager.computeCredentialId(issuerA, DOC_HASH_2));
     }
 }

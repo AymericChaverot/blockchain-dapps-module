@@ -29,14 +29,14 @@ const SAFETY_BREACH = 1;
 describe("SitePass end-to-end", async function () {
   const { viem, networkHelpers } = await network.create();
   const publicClient = await viem.getPublicClient();
-  const [admin, apave, dekra, worker, attacker] = await viem.getWalletClients();
+  const [admin, issuerA, issuerB, worker, attacker] = await viem.getWalletClients();
   const chainId = await publicClient.getChainId();
 
   async function deploySitePass() {
     const registry = await viem.deployContract("IssuerRegistry", [admin.account.address]);
     const manager = await viem.deployContract("SiteCredentialManager", [registry.address]);
-    await registry.write.addIssuer([apave.account.address, "Apave", "apave.com"]);
-    await registry.write.addIssuer([dekra.account.address, "Dekra", "dekra.com"]);
+    await registry.write.addIssuer([issuerA.account.address, "Issuer A", "issuer-a.example"]);
+    await registry.write.addIssuer([issuerB.account.address, "Issuer B", "issuer-b.example"]);
     return { registry, manager };
   }
 
@@ -45,13 +45,13 @@ describe("SitePass end-to-end", async function () {
     const document = buildCredentialDocument({
       chainId,
       manager: managerAddress,
-      issuer: { address: apave.account.address, name: "Apave", domain: "apave.com" },
+      issuer: { address: issuerA.account.address, name: "Issuer A", domain: "issuer-a.example" },
       holder: {
         address: worker.account.address,
-        firstName: "Camille",
-        lastName: "Martin",
-        birthDate: "1991-04-12",
-        employer: "ACME Construction",
+        firstName: "Worker",
+        lastName: "Test",
+        birthDate: "1990-01-01",
+        employer: "Demo Construction",
       },
       clearanceCode: "NUC-PR1-CC",
       training: { sessionReference: "S-001", location: "Lyon", completedOn: "2026-10-01", result: "Passed" },
@@ -69,7 +69,7 @@ describe("SitePass end-to-end", async function () {
 
     const hash = await contracts.manager.write.issueCredential(
       [worker.account.address, credentialType, documentHash, expiresAt],
-      { account: apave.account },
+      { account: issuerA.account },
     );
     await publicClient.waitForTransactionReceipt({ hash });
     const [event] = await contracts.manager.getEvents.CredentialIssued();
@@ -87,7 +87,7 @@ describe("SitePass end-to-end", async function () {
     // The id can be recomputed off-chain from the document alone.
     assert.equal(
       id,
-      computeCredentialId({ chainId, manager: manager.address, issuer: apave.account.address, documentHash }),
+      computeCredentialId({ chainId, manager: manager.address, issuer: issuerA.account.address, documentHash }),
     );
     assert.deepEqual(await manager.read.getCredentialsByDocumentHash([documentHash]), [id]);
 
@@ -96,7 +96,7 @@ describe("SitePass end-to-end", async function () {
     const tx = await publicClient.getTransaction({ hash: log.transactionHash });
     const receipt = await publicClient.getTransactionReceipt({ hash: log.transactionHash });
     const onChainBytes = (tx.input + receipt.logs.map((l) => l.data + l.topics.join("")).join("")).toLowerCase();
-    for (const secret of ["Camille", "Martin", "1991-04-12", "ACME"]) {
+    for (const secret of ["Worker", "Test", "1990-01-01", "Demo Construction"]) {
       assert.ok(!onChainBytes.includes(Buffer.from(secret).toString("hex")), `"${secret}" leaked on-chain`);
     }
     assert.ok(!onChainBytes.includes(document.salt.slice(2).toLowerCase()), "salt leaked on-chain");
@@ -114,9 +114,9 @@ describe("SitePass end-to-end", async function () {
     assert.equal(view.exists, true);
     assert.equal(view.isValid, true);
     assert.equal(view.status, CREDENTIAL_STATUS.VALID);
-    assert.equal(view.issuer, getAddress(apave.account.address));
-    assert.equal(view.issuerName, "Apave");
-    assert.equal(view.issuerDomain, "apave.com");
+    assert.equal(view.issuer, getAddress(issuerA.account.address));
+    assert.equal(view.issuerName, "Issuer A");
+    assert.equal(view.issuerDomain, "issuer-a.example");
     assert.equal(view.holder, getAddress(worker.account.address));
     assert.equal(view.documentHash, documentHash);
     assert.equal(view.expiresAt, expiresAt);
@@ -153,10 +153,10 @@ describe("SitePass end-to-end", async function () {
     const { manager, id } = await issueDemoCredential();
 
     await viem.assertions.emitWithArgs(
-      manager.write.revokeCredential([id, SAFETY_BREACH], { account: apave.account }),
+      manager.write.revokeCredential([id, SAFETY_BREACH], { account: issuerA.account }),
       manager,
       "CredentialRevoked",
-      [id, getAddress(apave.account.address), getAddress(worker.account.address), SAFETY_BREACH, (t: bigint) => t > 0n],
+      [id, getAddress(issuerA.account.address), getAddress(worker.account.address), SAFETY_BREACH, (t: bigint) => t > 0n],
     );
 
     const view = await manager.read.verifyCredential([id]);
@@ -180,10 +180,10 @@ describe("SitePass end-to-end", async function () {
     );
 
     await viem.assertions.revertWithCustomErrorWithArgs(
-      manager.write.revokeCredential([id, SAFETY_BREACH], { account: dekra.account }),
+      manager.write.revokeCredential([id, SAFETY_BREACH], { account: issuerB.account }),
       manager,
       "NotCredentialIssuer",
-      [id, getAddress(dekra.account.address)],
+      [id, getAddress(issuerB.account.address)],
     );
 
     await viem.assertions.revertWithCustomErrorWithArgs(
