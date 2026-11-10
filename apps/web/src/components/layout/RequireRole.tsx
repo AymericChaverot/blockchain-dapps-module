@@ -17,16 +17,20 @@ const PROMPTS: Record<Exclude<Requirement, "public">, { title: string; descripti
     denied: "",
   },
   issuer: {
-    title: "Sign in as a training organization",
-    description: "Connect the wallet registered for your organization in the SitePass registry.",
+    title: "Sign in as a trainer",
+    description: "Connect your personal wallet: your organization added it as an issuing member.",
     denied:
-      "This wallet is not registered in the SitePass issuer registry. Ask the registry administrators to accredit your organization, then reconnect.",
+      "This wallet is not an issuing member of any organization. Ask the admins of your organization to add it (a proposal in their multisig), then reconnect.",
   },
-  admin: {
-    title: "Sign in as registry administrator",
-    description: "Connect the registry owner account (a multisig in production).",
-    denied:
-      "Only the registry owner can manage accredited organizations. The public list of issuers stays available to everyone.",
+  affiliated: {
+    title: "Sign in as a member of an organization",
+    description: "Connect your personal wallet: admins and issuing members of an organization can open this page.",
+    denied: "This wallet does not belong to any organization of the federation.",
+  },
+  orgAdmin: {
+    title: "Sign in as an organization admin",
+    description: "Connect the personal wallet of one of the admins of your organization.",
+    denied: "Only the admins of an organization (its internal multisig) can do this.",
   },
 };
 
@@ -80,7 +84,7 @@ export function RequireRole({ requirement, children }: { requirement: Requiremen
           <Link to="/">Verify a credential</Link>
         </Button>
         <Button asChild variant="ghost">
-          <Link to="/issuers">Accredited issuers</Link>
+          <Link to="/issuers">Accredited organizations</Link>
         </Button>
       </CardContent>
     </Card>

@@ -196,6 +196,10 @@ export function CredentialDetails({
           />
           <HexValue value={credential.issuer} href={explorerAddressUrl(credential.issuer)} />
         </Row>
+        <Row label="Signed by" icon={<UserIcon className="size-3.5" />}>
+          <HexValue value={credential.signer} href={explorerAddressUrl(credential.signer)} />
+          <span className="text-muted-foreground block text-xs">member of the organization at issuance</span>
+        </Row>
         <Row label="Holder wallet" icon={<UserIcon className="size-3.5" />}>
           <HexValue value={credential.holder} href={explorerAddressUrl(credential.holder)} />
         </Row>
@@ -206,6 +210,9 @@ export function CredentialDetails({
           <Row label="Revocation">
             <span className="text-destructive font-medium">{revocationReasonLabel(credential.revocationReason)}</span>
             <span className="text-muted-foreground"> · {formatDateTime(credential.revokedAt)}</span>
+            <span className="text-muted-foreground flex flex-wrap items-center gap-1 text-xs">
+              by <HexValue value={credential.revokedBy} href={explorerAddressUrl(credential.revokedBy)} />
+            </span>
           </Row>
         )}
         <Row label="Document SHA-256" icon={<FingerprintIcon className="size-3.5" />}>

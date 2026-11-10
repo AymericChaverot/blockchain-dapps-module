@@ -6,6 +6,9 @@ import {
   FileCheck2Icon,
   FilePlus2Icon,
   FileWarningIcon,
+  GavelIcon,
+  BuildingIcon,
+  UsersRoundIcon,
   KeyRoundIcon,
   LandmarkIcon,
   OctagonXIcon,
@@ -35,9 +38,13 @@ import { cn } from "@/lib/utils";
 import { tamperCertificate } from "@/pages/VerifierPage";
 
 const PERSONA_HOME: Record<PersonaId, { to: string; label: string }> = {
-  admin: { to: "/admin", label: "Administration" },
+  adminA1: { to: "/organization", label: "Organization" },
+  adminA2: { to: "/organization", label: "Organization" },
   issuerA: { to: "/issuer", label: "Issuer workspace" },
+  issuerA2: { to: "/issuer", label: "Issuer workspace" },
+  adminB: { to: "/governance", label: "Governance" },
   issuerB: { to: "/issuer", label: "Issuer workspace" },
+  adminC: { to: "/governance", label: "Governance" },
   holder: { to: "/wallet", label: "My credentials" },
   outsider: { to: "/issuer/new", label: "Try to issue" },
 };
@@ -61,7 +68,10 @@ function PersonaCard({ persona, active, onAct }: { persona: Persona; active: boo
               <span className="font-semibold">{persona.label}</span>
               {active && <Badge variant="info">Active</Badge>}
             </div>
-            <div className="text-muted-foreground text-xs">{persona.role}</div>
+            <div className="text-muted-foreground text-xs">
+              {persona.role}
+              {persona.organization && ` · ${persona.organization}`}
+            </div>
           </div>
         </div>
         <p className="text-muted-foreground text-sm">{persona.description}</p>
@@ -236,10 +246,19 @@ export function DemoPage() {
 
   const steps: Step[] = [
     {
-      title: "Root of trust",
+      title: "No admin: a federation",
       icon: <LandmarkIcon />,
-      description: "Public list of accredited organizations, with their domain cross-check. Governed by the registry admin.",
-      action: { label: "Open accredited issuers", run: () => navigate("/issuers") },
+      description:
+        "Public list of accredited organizations, each one a contract run by its people (admins + issuing members), with their domain cross-check. Nobody owns the registry.",
+      action: { label: "Open accredited organizations", run: () => navigate("/issuers") },
+    },
+    {
+      title: "An organization is a multisig of people",
+      icon: <UsersRoundIcon />,
+      persona: "adminA1",
+      description:
+        "Admin A1 proposes to add a trainer to the first organization: nothing happens until Admin A2 co-signs, then the timelock runs. Removing a person runs at once.",
+      action: { label: "Open the organization as Admin A1", run: () => go("adminA1", "/organization") },
     },
     {
       title: "Issue a credential",
@@ -279,11 +298,27 @@ export function DemoPage() {
       action: { label: "Open the valid credential", run: () => navigate(valid ? `/?id=${valid.id}` : "/") },
     },
     {
-      title: "Live revocation",
+      title: "Live revocation by a colleague",
       icon: <BanIcon />,
-      persona: "issuerA",
-      description: `Revoke ${toRevoke?.clearanceCode ?? "the to-revoke credential"} with a reason, then verify it again: it shows as revoked, nothing is deleted.`,
-      action: { label: "Open the issuer workspace", run: () => go("issuerA", "/issuer") },
+      persona: "issuerA2",
+      description: `Trainer A signed ${toRevoke?.clearanceCode ?? "the to-revoke credential"}; Trainer A2, from the same organization, revokes it with a reason. Verify it again: revoked, nothing deleted, signer and revoker both recorded.`,
+      action: { label: "Open the workspace as Trainer A2", run: () => go("issuerA2", "/issuer") },
+    },
+    {
+      title: "Suspend an organization by vote",
+      icon: <GavelIcon />,
+      persona: "adminA1",
+      description:
+        "Open a suspension of the second organization. Its own vote does not count, so the first organization decides alone: Admin A1 votes, Admin A2 co-signs, the suspension runs at once and its credentials show “Issuer suspended”.",
+      action: { label: "Open governance as Admin A1", run: () => go("adminA1", "/governance") },
+    },
+    {
+      title: "Admit a new organization",
+      icon: <BuildingIcon />,
+      persona: "adminC",
+      description:
+        "Admin C creates an organization and applies for admission; the accredited organizations vote, then anyone executes after the timelock (60 s on the local chain).",
+      action: { label: "Open governance as Admin C", run: () => go("adminC", "/governance") },
     },
     {
       title: "Failure: non-issuer issues",
@@ -293,11 +328,11 @@ export function DemoPage() {
       action: { label: "Try to issue as an outsider", run: () => go("outsider", "/issuer/new") },
     },
     {
-      title: "Failure: another issuer revokes",
+      title: "Failure: another organization revokes",
       icon: <OctagonXIcon />,
       persona: "issuerB",
       description: "Paste the ID of a credential issued by the first organization in “Revoke a credential by ID”: NotCredentialIssuer.",
-      action: { label: "Open as the second issuer", run: () => go("issuerB", "/issuer") },
+      action: { label: "Open as Trainer B", run: () => go("issuerB", "/issuer") },
     },
     {
       title: "Failure: the worker transfers",

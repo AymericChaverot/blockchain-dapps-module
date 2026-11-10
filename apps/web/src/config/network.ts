@@ -53,7 +53,6 @@ interface DeploymentRecord {
   issuerRegistry: string;
   siteCredentialManager: string;
   deploymentBlock: number;
-  registryAdmin?: string;
 }
 
 const record = (deployments as Record<string, DeploymentRecord | undefined>)[String(chain.id)];

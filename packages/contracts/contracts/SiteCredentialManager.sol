@@ -7,6 +7,8 @@ import {IIssuerRegistry} from "./interfaces/IIssuerRegistry.sol";
 /// @notice Anchors professional safety credentials (nuclear zone access,
 ///         electrical clearance, work at height...) issued by accredited
 ///         training organizations to workers on sensitive construction sites.
+///         A credential is issued BY an organization (its {Organization}
+///         contract address) and SIGNED by one of its members (a person).
 ///
 /// @dev Design notes
 ///      - Attestation model (lightweight EAS-style), NOT a token: a credential
@@ -21,8 +23,12 @@ import {IIssuerRegistry} from "./interfaces/IIssuerRegistry.sol";
 ///        cannot be brute-forced from guessable fields (name, birth date...).
 ///      - Revocation never deletes data: it flags the record, timestamps it and
 ///        stores a reason code, so the history remains auditable.
+///      - Any current member of the issuing organization may revoke one of its
+///        credentials, so that a credential stays revocable when the person who
+///        signed it leaves the organization or loses their key.
 ///      - The contract has no owner and no upgrade path: the deployer keeps no
-///        power once it is deployed. Trust decisions live in {IssuerRegistry}.
+///        power once it is deployed. Trust decisions live in {IssuerRegistry},
+///        which is itself governed by the organizations (no admin).
 contract SiteCredentialManager {
     // ---------------------------------------------------------------------
     // Types
@@ -50,14 +56,16 @@ contract SiteCredentialManager {
 
     /// @dev Storage layout of an attestation.
     struct Credential {
-        address issuer;
-        uint64 issuedAt;
+        address issuer; // issuing organization (Organization contract)
+        uint64 issuedAt; // 0 = does not exist
         address holder;
         uint64 expiresAt; // 0 = never expires
+        address signer; // member of `issuer` who issued it
+        uint64 revokedAt; // 0 = not revoked
+        address revokedBy; // member of `issuer` who revoked it
+        RevocationReason revocationReason;
         bytes32 credentialType; // short ASCII code, e.g. "NUC-PR1-CC"
         bytes32 documentHash; // SHA-256 of the off-chain JSON certificate
-        uint64 revokedAt; // 0 = not revoked
-        RevocationReason revocationReason;
     }
 
     /// @notice Full, self-contained answer returned to verifiers.
@@ -66,7 +74,8 @@ contract SiteCredentialManager {
         bool exists;
         bool isValid;
         CredentialStatus status;
-        address issuer;
+        address issuer; // issuing organization
+        address signer; // person who issued it
         string issuerName;
         string issuerDomain;
         bool issuerActive;
@@ -78,6 +87,7 @@ contract SiteCredentialManager {
         bool isExpired;
         bool isRevoked;
         uint64 revokedAt;
+        address revokedBy;
         uint8 revocationReason;
     }
 
@@ -85,12 +95,13 @@ contract SiteCredentialManager {
     // Storage
     // ---------------------------------------------------------------------
 
-    /// @notice Registry of accredited issuers.
+    /// @notice Federation of accredited organizations.
     IIssuerRegistry public immutable issuerRegistry;
 
     mapping(bytes32 id => Credential) private _credentials;
     mapping(address holder => bytes32[]) private _credentialsByHolder;
     mapping(address issuer => bytes32[]) private _credentialsByIssuer;
+    mapping(address signer => bytes32[]) private _credentialsBySigner;
     mapping(bytes32 documentHash => bytes32[]) private _credentialsByDocumentHash;
     uint256 private _totalCredentials;
 
@@ -102,6 +113,7 @@ contract SiteCredentialManager {
         bytes32 indexed id,
         address indexed issuer,
         address indexed holder,
+        address signer,
         bytes32 credentialType,
         bytes32 documentHash,
         uint64 issuedAt,
@@ -109,7 +121,12 @@ contract SiteCredentialManager {
     );
 
     event CredentialRevoked(
-        bytes32 indexed id, address indexed issuer, address indexed holder, uint8 reason, uint64 revokedAt
+        bytes32 indexed id,
+        address indexed issuer,
+        address indexed holder,
+        address revokedBy,
+        uint8 reason,
+        uint64 revokedAt
     );
 
     // ---------------------------------------------------------------------
@@ -138,8 +155,9 @@ contract SiteCredentialManager {
     // Issuance & revocation
     // ---------------------------------------------------------------------
 
-    /// @notice Issues a non-transferable credential to `holder`.
-    /// @dev Only callable by an active issuer of {IssuerRegistry}. The id is
+    /// @notice Issues a non-transferable credential to `holder`, on behalf of
+    ///         the caller's organization.
+    /// @dev Only callable by a member of an ACTIVE organization. The id is
     ///      deterministic (see {computeCredentialId}) so that a verifier holding
     ///      the JSON certificate can recompute it without any index.
     /// @param holder Worker's address (pseudonymous, no personal data).
@@ -151,47 +169,52 @@ contract SiteCredentialManager {
         external
         returns (bytes32 id)
     {
-        if (!issuerRegistry.isActiveIssuer(msg.sender)) revert NotAuthorizedIssuer(msg.sender);
+        address org = issuerRegistry.issuingOrganizationOf(msg.sender);
+        if (org == address(0)) revert NotAuthorizedIssuer(msg.sender);
         if (holder == address(0)) revert ZeroAddress();
-        if (holder == msg.sender) revert SelfIssuanceNotAllowed(msg.sender);
+        if (holder == msg.sender || holder == org) revert SelfIssuanceNotAllowed(msg.sender);
         if (credentialType == bytes32(0)) revert InvalidCredentialType();
         if (documentHash == bytes32(0)) revert InvalidDocumentHash();
         uint64 nowTs = uint64(block.timestamp);
         if (expiresAt != 0 && expiresAt <= nowTs) revert InvalidExpiration(expiresAt, nowTs);
 
-        id = computeCredentialId(msg.sender, documentHash);
+        id = computeCredentialId(org, documentHash);
         if (_credentials[id].issuedAt != 0) revert CredentialAlreadyExists(id);
 
         _credentials[id] = Credential({
-            issuer: msg.sender,
+            issuer: org,
             issuedAt: nowTs,
             holder: holder,
             expiresAt: expiresAt,
-            credentialType: credentialType,
-            documentHash: documentHash,
+            signer: msg.sender,
             revokedAt: 0,
-            revocationReason: RevocationReason.NONE
+            revokedBy: address(0),
+            revocationReason: RevocationReason.NONE,
+            credentialType: credentialType,
+            documentHash: documentHash
         });
         _credentialsByHolder[holder].push(id);
-        _credentialsByIssuer[msg.sender].push(id);
+        _credentialsByIssuer[org].push(id);
+        _credentialsBySigner[msg.sender].push(id);
         _credentialsByDocumentHash[documentHash].push(id);
         unchecked {
             ++_totalCredentials;
         }
 
-        emit CredentialIssued(id, msg.sender, holder, credentialType, documentHash, nowTs, expiresAt);
+        emit CredentialIssued(id, org, holder, msg.sender, credentialType, documentHash, nowTs, expiresAt);
     }
 
     /// @notice Revokes a credential. The record is kept, flagged and timestamped.
-    /// @dev Strictly restricted to the original issuer of this credential: not
-    ///      the registry admin, not another accredited issuer. A suspended issuer
-    ///      can still revoke (revoking must never be blocked).
+    /// @dev Restricted to the current members of the issuing organization: not
+    ///      another organization, not the holder, not a former member. Members
+    ///      of a suspended organization can still revoke (revoking must never
+    ///      be blocked).
     /// @param id Credential identifier.
     /// @param reasonCode One of {RevocationReason} except `NONE` (1..4).
     function revokeCredential(bytes32 id, uint8 reasonCode) external {
         Credential storage credential = _credentials[id];
         if (credential.issuedAt == 0) revert CredentialNotFound(id);
-        if (credential.issuer != msg.sender) revert NotCredentialIssuer(id, msg.sender);
+        if (!issuerRegistry.isMemberOf(msg.sender, credential.issuer)) revert NotCredentialIssuer(id, msg.sender);
         if (credential.revokedAt != 0) revert CredentialAlreadyRevoked(id);
         if (reasonCode == uint8(RevocationReason.NONE) || reasonCode > uint8(RevocationReason.FRAUDULENT_ISSUANCE)) {
             revert InvalidRevocationReason(reasonCode);
@@ -199,9 +222,10 @@ contract SiteCredentialManager {
 
         uint64 nowTs = uint64(block.timestamp);
         credential.revokedAt = nowTs;
+        credential.revokedBy = msg.sender;
         credential.revocationReason = RevocationReason(reasonCode);
 
-        emit CredentialRevoked(id, msg.sender, credential.holder, reasonCode, nowTs);
+        emit CredentialRevoked(id, credential.issuer, credential.holder, msg.sender, reasonCode, nowTs);
     }
 
     /// @notice Credentials cannot change hands. This function exists only so
@@ -226,8 +250,8 @@ contract SiteCredentialManager {
             return result; // exists = false, status = UNKNOWN
         }
 
-        IIssuerRegistry.Issuer memory issuer = issuerRegistry.getIssuer(credential.issuer);
-        bool issuerActive = issuer.registered && issuer.active;
+        IIssuerRegistry.OrganizationInfo memory issuer = issuerRegistry.getOrganization(credential.issuer);
+        bool issuerActive = issuer.status == IIssuerRegistry.OrganizationStatus.ACTIVE;
         bool isRevoked = credential.revokedAt != 0;
         bool isExpired = credential.expiresAt != 0 && block.timestamp >= credential.expiresAt;
 
@@ -241,6 +265,7 @@ contract SiteCredentialManager {
         result.isValid = status == CredentialStatus.VALID;
         result.status = status;
         result.issuer = credential.issuer;
+        result.signer = credential.signer;
         result.issuerName = issuer.name;
         result.issuerDomain = issuer.domain;
         result.issuerActive = issuerActive;
@@ -252,6 +277,7 @@ contract SiteCredentialManager {
         result.isExpired = isExpired;
         result.isRevoked = isRevoked;
         result.revokedAt = credential.revokedAt;
+        result.revokedBy = credential.revokedBy;
         result.revocationReason = uint8(credential.revocationReason);
     }
 
@@ -274,9 +300,14 @@ contract SiteCredentialManager {
         return _credentialsByHolder[holder];
     }
 
-    /// @notice Every credential id ever issued by `issuer`.
+    /// @notice Every credential id ever issued by the organization `issuer`.
     function getCredentialsByIssuer(address issuer) external view returns (bytes32[] memory) {
         return _credentialsByIssuer[issuer];
+    }
+
+    /// @notice Every credential id ever signed by the person `signer`.
+    function getCredentialsBySigner(address signer) external view returns (bytes32[] memory) {
+        return _credentialsBySigner[signer];
     }
 
     /// @notice Credential ids anchoring a given document fingerprint (lets a
@@ -290,8 +321,8 @@ contract SiteCredentialManager {
         return _totalCredentials;
     }
 
-    /// @notice Deterministic identifier of the credential `issuer` would create
-    ///         for `documentHash` on this deployment.
+    /// @notice Deterministic identifier of the credential the organization
+    ///         `issuer` would create for `documentHash` on this deployment.
     function computeCredentialId(address issuer, bytes32 documentHash) public view returns (bytes32) {
         return keccak256(abi.encode(block.chainid, address(this), issuer, documentHash));
     }

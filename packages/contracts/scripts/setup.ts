@@ -3,7 +3,7 @@
  * the empty Base Sepolia demo wallets with freshly generated keys.
  *
  *   pnpm env:init                # create .env if missing, print the actors
- *   pnpm env:keys                # also generate deployer / issuers / holder keys
+ *   pnpm env:keys                # also generate deployer / people / holder keys
  *
  * Run with plain Node (>= 22.18, native TypeScript type stripping).
  */
@@ -16,7 +16,18 @@ import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const ENV_FILE = path.join(ROOT, ".env");
 const EXAMPLE_FILE = path.join(ROOT, ".env.example");
-const KEY_VARS = ["DEPLOYER_PRIVATE_KEY", "ISSUER_A_PRIVATE_KEY", "ISSUER_B_PRIVATE_KEY", "HOLDER_PRIVATE_KEY"] as const;
+/** Deployer, then the people of the two founding organizations, the candidate admin and the worker. */
+const KEY_VARS = [
+  "DEPLOYER_PRIVATE_KEY",
+  "ADMIN_A1_PRIVATE_KEY",
+  "ADMIN_A2_PRIVATE_KEY",
+  "ISSUER_A_PRIVATE_KEY",
+  "ISSUER_A2_PRIVATE_KEY",
+  "ADMIN_B_PRIVATE_KEY",
+  "ISSUER_B_PRIVATE_KEY",
+  "ADMIN_C_PRIVATE_KEY",
+  "HOLDER_PRIVATE_KEY",
+] as const;
 
 function readVar(content: string, name: string): string {
   const match = content.match(new RegExp(`^${name}=(.*)$`, "m"));
@@ -55,7 +66,7 @@ if (process.argv.includes("--generate-keys")) {
 console.log("\nBase Sepolia actors configured in .env:");
 for (const name of KEY_VARS) {
   const key = readVar(content, name);
-  const role = name.replace("_PRIVATE_KEY", "").toLowerCase().padEnd(9);
+  const role = name.replace("_PRIVATE_KEY", "").toLowerCase().padEnd(10);
   console.log(`  ${role} ${key ? privateKeyToAccount(key as `0x${string}`).address : "(not set)"}`);
 }
 const deployerKey = readVar(content, "DEPLOYER_PRIVATE_KEY");
@@ -63,5 +74,5 @@ if (deployerKey) {
   console.log(
     `\n→ Fund the deployer with Base Sepolia ETH (e.g. https://www.alchemy.com/faucets/base-sepolia):\n  ${privateKeyToAccount(deployerKey as `0x${string}`).address}`,
   );
-  console.log("  The deploy script tops up both issuers automatically. Then run: pnpm deploy:base-sepolia");
+  console.log("  The deploy script tops up every demo person with a little gas. Then run: pnpm deploy:base-sepolia");
 }

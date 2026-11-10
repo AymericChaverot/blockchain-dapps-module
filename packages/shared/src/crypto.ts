@@ -37,7 +37,8 @@ export function decodeCredentialType(value: Hex): string {
 
 /**
  * Off-chain mirror of `SiteCredentialManager.computeCredentialId`:
- * keccak256(abi.encode(chainId, manager, issuer, documentHash)).
+ * keccak256(abi.encode(chainId, manager, issuer, documentHash)), where
+ * `issuer` is the issuing Organization contract (not the signing person).
  */
 export function computeCredentialId(params: {
   chainId: number;

@@ -5,14 +5,33 @@ import type { Address } from "viem";
 
 import { CONTRACTS_DIR, REPO_ROOT } from "./context.ts";
 
+/** A founding organization as passed to the IssuerRegistry constructor. */
+export interface FoundingOrganizationRecord {
+  key: string;
+  address: Address;
+  name: string;
+  domain: string;
+  admins: Address[];
+  threshold: number;
+  members: Address[];
+}
+
 export interface DeploymentRecord {
   network: string;
   chainId: number;
   issuerRegistry: Address;
   siteCredentialManager: Address;
   deploymentBlock: number;
+  /** Deployed the contracts; holds no role in them. */
   deployer: Address;
-  registryAdmin: Address;
+  /** Federation parameters (constructor arguments of IssuerRegistry). */
+  governance: {
+    proposalLifetime: number;
+    timelockDelay: number;
+    initialQuorumBps: number;
+  };
+  /** Organizations created and admitted at deployment (no admin account exists). */
+  foundingOrganizations: FoundingOrganizationRecord[];
   deployedAt: string;
 }
 
@@ -59,11 +78,6 @@ export function saveDeployment(record: DeploymentRecord): void {
   const web = readJson<Record<string, DeploymentRecord>>(WEB_DEPLOYMENTS_FILE, {});
   web[String(record.chainId)] = record;
   writeJson(WEB_DEPLOYMENTS_FILE, web);
-}
-
-export function updateDeploymentAdmin(networkName: string, registryAdmin: Address): void {
-  const record = readDeployment(networkName);
-  saveDeployment({ ...record, registryAdmin });
 }
 
 /** Merges one network's demo fixtures into the web app's demo seed file. */

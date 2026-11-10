@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import type { Address, ContractFunctionReturnType, Hex } from "viem";
 
-import { issuerRegistryAbi, siteCredentialManagerAbi } from "@/config/abis";
+import { siteCredentialManagerAbi } from "@/config/abis";
 import { requireContracts } from "@/config/network";
 import { publicClient } from "@/config/wagmi";
 
@@ -29,8 +29,6 @@ export type CredentialView = ContractFunctionReturnType<
   "view",
   "verifyCredential"
 >;
-
-export type IssuerRecord = ContractFunctionReturnType<typeof issuerRegistryAbi, "view", "getIssuer">;
 
 export interface StatusMeta {
   label: string;
@@ -107,7 +105,10 @@ export async function fetchCredentials(ids: readonly Hex[]): Promise<readonly Cr
   });
 }
 
-async function readIds(functionName: "getCredentialsByHolder" | "getCredentialsByIssuer", account: Address) {
+async function readIds(
+  functionName: "getCredentialsByHolder" | "getCredentialsByIssuer" | "getCredentialsBySigner",
+  account: Address,
+) {
   return publicClient.readContract({
     address: requireContracts().siteCredentialManager,
     abi: siteCredentialManagerAbi,
@@ -121,9 +122,9 @@ export async function fetchHolderCredentials(holder: Address): Promise<Credentia
   return [...(await fetchCredentials(await readIds("getCredentialsByHolder", holder)))].reverse();
 }
 
-/** Most recent first. */
-export async function fetchIssuerCredentials(issuer: Address): Promise<CredentialView[]> {
-  return [...(await fetchCredentials(await readIds("getCredentialsByIssuer", issuer)))].reverse();
+/** Credentials issued by an organization (any of its members), most recent first. */
+export async function fetchIssuerCredentials(organization: Address): Promise<CredentialView[]> {
+  return [...(await fetchCredentials(await readIds("getCredentialsByIssuer", organization)))].reverse();
 }
 
 export async function findCredentialIdsByDocumentHash(documentHash: Hex): Promise<readonly Hex[]> {
@@ -133,28 +134,6 @@ export async function findCredentialIdsByDocumentHash(documentHash: Hex): Promis
     functionName: "getCredentialsByDocumentHash",
     args: [documentHash],
   });
-}
-
-export async function fetchIssuer(account: Address): Promise<IssuerRecord> {
-  return publicClient.readContract({
-    address: requireContracts().issuerRegistry,
-    abi: issuerRegistryAbi,
-    functionName: "getIssuer",
-    args: [account],
-  });
-}
-
-export async function fetchRegistryOverview() {
-  const address = requireContracts().issuerRegistry;
-  const [owner, pendingOwner, accounts] = await Promise.all([
-    publicClient.readContract({ address, abi: issuerRegistryAbi, functionName: "owner" }),
-    publicClient.readContract({ address, abi: issuerRegistryAbi, functionName: "pendingOwner" }),
-    publicClient.readContract({ address, abi: issuerRegistryAbi, functionName: "getIssuerAccounts" }),
-  ]);
-  const issuers = await Promise.all(
-    accounts.map(async (account) => ({ account, ...(await fetchIssuer(account)) })),
-  );
-  return { owner, pendingOwner, issuers };
 }
 
 const CATEGORY_ICONS: Record<string, LucideIcon> = {

@@ -7,6 +7,7 @@ import {
   type LucideIcon,
   PresentationIcon,
   ScanSearchIcon,
+  UsersRoundIcon,
 } from "lucide-react";
 
 import type { Requirement } from "@/hooks/useRoles";
@@ -31,7 +32,7 @@ export const NAV_SECTIONS: NavSection[] = [
     title: "Verification",
     items: [
       { to: "/", label: "Verify a credential", icon: ScanSearchIcon, requires: "public", end: true },
-      { to: "/issuers", label: "Accredited issuers", icon: BuildingIcon, requires: "public" },
+      { to: "/issuers", label: "Accredited organizations", icon: BuildingIcon, requires: "public" },
     ],
   },
   {
@@ -43,11 +44,12 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { to: "/issuer", label: "Overview", icon: LayoutDashboardIcon, requires: "issuer", end: true },
       { to: "/issuer/new", label: "Issue a credential", icon: FilePlus2Icon, requires: "issuer" },
+      { to: "/organization", label: "My organization", icon: UsersRoundIcon, requires: "affiliated" },
     ],
   },
   {
     title: "Governance",
-    items: [{ to: "/admin", label: "Registry administration", icon: LandmarkIcon, requires: "admin" }],
+    items: [{ to: "/governance", label: "Federation governance", icon: LandmarkIcon, requires: "public" }],
   },
   {
     title: "Demo",
@@ -58,6 +60,7 @@ export const NAV_SECTIONS: NavSection[] = [
 export const REQUIREMENT_LABEL: Record<Requirement, string> = {
   public: "Everyone",
   wallet: "Connected wallet",
-  issuer: "Accredited issuer",
-  admin: "Registry admin",
+  issuer: "Issuing member",
+  affiliated: "Organization member",
+  orgAdmin: "Organization admin",
 };

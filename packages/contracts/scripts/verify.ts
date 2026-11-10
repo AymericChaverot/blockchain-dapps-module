@@ -1,5 +1,6 @@
 /**
- * Publishes the source code of the deployed contracts on the block explorer.
+ * Publishes the source code of the deployed contracts on the block explorer:
+ * the registry, the manager and every founding Organization contract.
  * Uses Etherscan (Basescan) when ETHERSCAN_API_KEY is set, and always tries
  * Blockscout and Sourcify, which need no key.
  *
@@ -16,8 +17,29 @@ const deployment = readDeployment(ctx.networkName);
 
 const providers = [...(env("ETHERSCAN_API_KEY") ? (["etherscan"] as const) : []), "blockscout", "sourcify"] as const;
 
+const { governance, foundingOrganizations } = deployment;
 const targets = [
-  { name: "IssuerRegistry", address: deployment.issuerRegistry, constructorArgs: [deployment.deployer] },
+  {
+    name: "IssuerRegistry",
+    address: deployment.issuerRegistry,
+    constructorArgs: [
+      BigInt(governance.proposalLifetime),
+      BigInt(governance.timelockDelay),
+      governance.initialQuorumBps,
+      foundingOrganizations.map(({ name, domain, admins, threshold, members }) => ({
+        name,
+        domain,
+        admins,
+        threshold: BigInt(threshold),
+        members,
+      })),
+    ],
+  },
+  ...foundingOrganizations.map((org) => ({
+    name: "Organization",
+    address: org.address,
+    constructorArgs: [org.admins, BigInt(org.threshold), org.members],
+  })),
   {
     name: "SiteCredentialManager",
     address: deployment.siteCredentialManager,

@@ -3,14 +3,17 @@ import { type Address, isAddressEqual } from "viem";
 /**
  * Issuer identity cross-check through DNS (queried over DNS-over-HTTPS).
  *
- * An accredited organization proves that it controls the address registered
- * on-chain by publishing a TXT record on the domain it declared:
+ * An accredited organization proves that the Organization contract accredited
+ * on-chain is really its own by publishing a TXT record on the domain it
+ * declared:
  *
- *     _sitepass.issuer-a.example.  TXT  "sitepass-issuer=0xIssuerAddress"
+ *     _sitepass.issuer-a.example.  TXT  "sitepass-issuer=0xOrganizationContract"
  *
- * The registry says "the admin accredited this address as Issuer A"; DNS says
- * "whoever runs issuer-a.example claims this address". Both channels must be
- * compromised to impersonate an issuer.
+ * The registry says "the federation accredited this organization contract as
+ * Issuer A"; DNS says "whoever runs issuer-a.example claims this contract".
+ * Both channels must be compromised to impersonate an issuer. The contract
+ * address never changes when the people of the organization do, so the record
+ * is published once.
  */
 export const DNS_RECORD_PREFIX = "_sitepass";
 export const DNS_TXT_KEY = "sitepass-issuer";

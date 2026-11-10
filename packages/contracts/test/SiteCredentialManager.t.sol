@@ -1,27 +1,18 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {Test} from "forge-std/Test.sol";
-import {IssuerRegistry} from "../contracts/IssuerRegistry.sol";
-import {IIssuerRegistry} from "../contracts/interfaces/IIssuerRegistry.sol";
+import {SitePassBase} from "./SitePassBase.sol";
+import {Organization} from "../contracts/Organization.sol";
 import {SiteCredentialManager} from "../contracts/SiteCredentialManager.sol";
+import {IIssuerRegistry} from "../contracts/interfaces/IIssuerRegistry.sol";
 
 /// @notice Unit tests of credential issuance, revocation, verification,
 ///         non-transferability and expiration.
 ///
 /// The six scenarios required for the defense are grouped under the
 /// "SCENARIO n" banners below; the other tests cover edge cases.
-contract SiteCredentialManagerTest is Test {
-    IssuerRegistry internal registry;
-    SiteCredentialManager internal manager;
-
-    address internal admin = makeAddr("registryAdmin");
-    address internal issuerA = makeAddr("Issuer A");
-    address internal issuerB = makeAddr("Issuer B");
-    address internal worker = makeAddr("worker");
-    address internal otherWorker = makeAddr("otherWorker");
-    address internal attacker = makeAddr("attacker");
-
+/// A credential is issued BY an organization and SIGNED by one of its members.
+contract SiteCredentialManagerTest is SitePassBase {
     bytes32 internal constant TYPE_PR1 = bytes32("NUC-PR1-CC");
     bytes32 internal constant TYPE_B2V = bytes32("ELEC-B2V");
     // Stand-ins for SHA-256 fingerprints. keccak256 is folded at compile time,
@@ -34,33 +25,26 @@ contract SiteCredentialManagerTest is Test {
     uint8 internal constant EXPIRED_EARLY = 3;
     uint8 internal constant FRAUDULENT_ISSUANCE = 4;
 
-    function setUp() public {
-        vm.warp(1_760_000_000); // realistic "now" (Oct 2025)
-        registry = new IssuerRegistry(admin);
-        manager = new SiteCredentialManager(registry);
-
-        vm.startPrank(admin);
-        registry.addIssuer(issuerA, "Issuer A", "issuer-a.example");
-        registry.addIssuer(issuerB, "Issuer B", "issuer-b.example");
-        vm.stopPrank();
-    }
-
-    function _issue(address issuer, bytes32 docHash, uint64 expiresAt) internal returns (bytes32 id) {
-        vm.prank(issuer);
+    function _issue(address signer, bytes32 docHash, uint64 expiresAt) internal returns (bytes32 id) {
+        vm.prank(signer);
         id = manager.issueCredential(worker, TYPE_PR1, docHash, expiresAt);
     }
 
+    function _isAccreditedMember(address account) internal view returns (bool) {
+        return account == issuerA || account == issuerA2 || account == issuerB || account == issuerC;
+    }
+
     // ==================================================================
-    // SCENARIO 1 - Valid issuance by an accredited issuer
+    // SCENARIO 1 - Valid issuance by a member of an accredited organization
     // ==================================================================
 
-    function test_Scenario1_IssueByAccreditedIssuer() public {
+    function test_Scenario1_IssueByAccreditedOrganizationMember() public {
         uint64 expiresAt = uint64(block.timestamp + 365 days);
-        bytes32 expectedId = manager.computeCredentialId(issuerA, DOC_HASH);
+        bytes32 expectedId = manager.computeCredentialId(address(orgA), DOC_HASH);
 
         vm.expectEmit(true, true, true, true, address(manager));
         emit SiteCredentialManager.CredentialIssued(
-            expectedId, issuerA, worker, TYPE_PR1, DOC_HASH, uint64(block.timestamp), expiresAt
+            expectedId, address(orgA), worker, issuerA, TYPE_PR1, DOC_HASH, uint64(block.timestamp), expiresAt
         );
 
         vm.prank(issuerA);
@@ -71,7 +55,8 @@ contract SiteCredentialManagerTest is Test {
         assertTrue(v.exists);
         assertTrue(v.isValid);
         assertEq(uint8(v.status), uint8(SiteCredentialManager.CredentialStatus.VALID));
-        assertEq(v.issuer, issuerA);
+        assertEq(v.issuer, address(orgA), "issued by the organization");
+        assertEq(v.signer, issuerA, "signed by the person");
         assertEq(v.issuerName, "Issuer A");
         assertEq(v.issuerDomain, "issuer-a.example");
         assertTrue(v.issuerActive);
@@ -83,6 +68,7 @@ contract SiteCredentialManagerTest is Test {
         assertFalse(v.isExpired);
         assertFalse(v.isRevoked);
         assertEq(v.revokedAt, 0);
+        assertEq(v.revokedBy, address(0));
         assertEq(v.revocationReason, 0);
         assertTrue(manager.isCredentialValid(id));
     }
@@ -91,29 +77,44 @@ contract SiteCredentialManagerTest is Test {
         bytes32 id1 = _issue(issuerA, DOC_HASH, 0);
         vm.prank(issuerB);
         bytes32 id2 = manager.issueCredential(worker, TYPE_B2V, DOC_HASH_2, 0);
+        vm.prank(issuerA2);
+        bytes32 id3 = manager.issueCredential(otherWorker, TYPE_B2V, DOC_HASH_2, 0);
 
         bytes32[] memory byHolder = manager.getCredentialsByHolder(worker);
         assertEq(byHolder.length, 2);
         assertEq(byHolder[0], id1);
         assertEq(byHolder[1], id2);
 
-        assertEq(manager.getCredentialsByIssuer(issuerA).length, 1);
-        assertEq(manager.getCredentialsByIssuer(issuerA)[0], id1);
-        assertEq(manager.getCredentialsByIssuer(issuerB)[0], id2);
+        bytes32[] memory byOrgA = manager.getCredentialsByIssuer(address(orgA));
+        assertEq(byOrgA.length, 2, "both members of A issue for A");
+        assertEq(byOrgA[0], id1);
+        assertEq(byOrgA[1], id3);
+        assertEq(manager.getCredentialsByIssuer(address(orgB))[0], id2);
+        assertEq(manager.getCredentialsBySigner(issuerA).length, 1);
+        assertEq(manager.getCredentialsBySigner(issuerA2)[0], id3);
         assertEq(manager.getCredentialsByDocumentHash(DOC_HASH)[0], id1);
-        assertEq(manager.getCredentialsByHolder(otherWorker).length, 0);
-        assertEq(manager.totalCredentials(), 2);
+        assertEq(manager.getCredentialsByDocumentHash(DOC_HASH_2).length, 2);
+        assertEq(manager.getCredentialsByHolder(attacker).length, 0);
+        assertEq(manager.totalCredentials(), 3);
     }
 
-    function test_Scenario1_TwoIssuersCanAnchorTheSameDocument() public {
+    function test_Scenario1_TwoOrganizationsCanAnchorTheSameDocument() public {
         bytes32 id1 = _issue(issuerA, DOC_HASH, 0);
         bytes32 id2 = _issue(issuerB, DOC_HASH, 0);
         assertTrue(id1 != id2);
         assertEq(manager.getCredentialsByDocumentHash(DOC_HASH).length, 2);
     }
 
+    function test_Scenario1_NewlyAdmittedMemberCanIssue() public {
+        address recruit = makeAddr("recruit");
+        _orgRun(orgB, Organization.Action.ADD_MEMBER, recruit, 0);
+        bytes32 id = _issue(recruit, DOC_HASH, 0);
+        assertEq(manager.verifyCredential(id).issuer, address(orgB));
+        assertEq(manager.verifyCredential(id).signer, recruit);
+    }
+
     // ==================================================================
-    // SCENARIO 2 - Issuance by a non-registered address must revert
+    // SCENARIO 2 - Issuance by anyone else must revert
     // ==================================================================
 
     function test_Scenario2_RevertWhen_UnregisteredAddressIssues() public {
@@ -125,24 +126,46 @@ contract SiteCredentialManagerTest is Test {
         assertEq(manager.totalCredentials(), 0);
     }
 
-    function test_Scenario2_RevertWhen_RegistryAdminIssues() public {
-        // Administering the registry does not grant issuance rights.
-        vm.prank(admin);
-        vm.expectRevert(abi.encodeWithSelector(SiteCredentialManager.NotAuthorizedIssuer.selector, admin));
+    function test_Scenario2_RevertWhen_OrganizationAdminWhoIsNotMemberIssues() public {
+        // Governing an organization does not grant issuance rights.
+        vm.prank(adminA1);
+        vm.expectRevert(abi.encodeWithSelector(SiteCredentialManager.NotAuthorizedIssuer.selector, adminA1));
         manager.issueCredential(worker, TYPE_PR1, DOC_HASH, 0);
     }
 
-    function test_Scenario2_RevertWhen_SuspendedIssuerIssues() public {
-        vm.prank(admin);
-        registry.suspendIssuer(issuerB);
+    function test_Scenario2_RevertWhen_OrganizationContractIssues() public {
+        vm.prank(address(orgA));
+        vm.expectRevert(abi.encodeWithSelector(SiteCredentialManager.NotAuthorizedIssuer.selector, address(orgA)));
+        manager.issueCredential(worker, TYPE_PR1, DOC_HASH, 0);
+    }
 
+    function test_Scenario2_RevertWhen_MemberOfSuspendedOrganizationIssues() public {
+        _suspendB();
         vm.prank(issuerB);
         vm.expectRevert(abi.encodeWithSelector(SiteCredentialManager.NotAuthorizedIssuer.selector, issuerB));
         manager.issueCredential(worker, TYPE_PR1, DOC_HASH, 0);
     }
 
+    function test_Scenario2_RevertWhen_MemberOfPendingOrganizationIssues() public {
+        address adminD = makeAddr("adminD");
+        address issuerD = makeAddr("issuerD");
+        vm.prank(adminD);
+        registry.createOrganization("Issuer D", "issuer-d.example", _list(adminD), 1, _list(issuerD));
+
+        vm.prank(issuerD);
+        vm.expectRevert(abi.encodeWithSelector(SiteCredentialManager.NotAuthorizedIssuer.selector, issuerD));
+        manager.issueCredential(worker, TYPE_PR1, DOC_HASH, 0);
+    }
+
+    function test_Scenario2_RevertWhen_RemovedMemberIssues() public {
+        _orgRun(orgA, Organization.Action.REMOVE_MEMBER, issuerA2, 0);
+        vm.prank(issuerA2);
+        vm.expectRevert(abi.encodeWithSelector(SiteCredentialManager.NotAuthorizedIssuer.selector, issuerA2));
+        manager.issueCredential(worker, TYPE_PR1, DOC_HASH, 0);
+    }
+
     function testFuzz_Scenario2_NoOneElseCanIssue(address caller) public {
-        vm.assume(caller != issuerA && caller != issuerB);
+        vm.assume(!_isAccreditedMember(caller));
         vm.prank(caller);
         vm.expectRevert(abi.encodeWithSelector(SiteCredentialManager.NotAuthorizedIssuer.selector, caller));
         manager.issueCredential(worker, TYPE_PR1, DOC_HASH, 0);
@@ -156,6 +179,9 @@ contract SiteCredentialManagerTest is Test {
         vm.expectRevert(abi.encodeWithSelector(SiteCredentialManager.SelfIssuanceNotAllowed.selector, issuerA));
         manager.issueCredential(issuerA, TYPE_PR1, DOC_HASH, 0);
 
+        vm.expectRevert(abi.encodeWithSelector(SiteCredentialManager.SelfIssuanceNotAllowed.selector, issuerA));
+        manager.issueCredential(address(orgA), TYPE_PR1, DOC_HASH, 0);
+
         vm.expectRevert(SiteCredentialManager.InvalidCredentialType.selector);
         manager.issueCredential(worker, bytes32(0), DOC_HASH, 0);
 
@@ -164,9 +190,10 @@ contract SiteCredentialManagerTest is Test {
         vm.stopPrank();
     }
 
-    function test_RevertWhen_IssuingTheSameDocumentTwice() public {
+    function test_RevertWhen_IssuingTheSameDocumentTwiceInTheSameOrganization() public {
         bytes32 id = _issue(issuerA, DOC_HASH, 0);
-        vm.prank(issuerA);
+        // Even another member of the same organization: the id is per organization.
+        vm.prank(issuerA2);
         vm.expectRevert(abi.encodeWithSelector(SiteCredentialManager.CredentialAlreadyExists.selector, id));
         manager.issueCredential(otherWorker, TYPE_PR1, DOC_HASH, 0);
     }
@@ -177,15 +204,17 @@ contract SiteCredentialManagerTest is Test {
     }
 
     // ==================================================================
-    // SCENARIO 3 - Valid revocation by the original issuer
+    // SCENARIO 3 - Valid revocation by the issuing organization
     // ==================================================================
 
-    function test_Scenario3_RevokeByOriginalIssuer() public {
+    function test_Scenario3_RevokeByOriginalSigner() public {
         bytes32 id = _issue(issuerA, DOC_HASH, uint64(block.timestamp + 365 days));
         vm.warp(block.timestamp + 10 days);
 
         vm.expectEmit(true, true, true, true, address(manager));
-        emit SiteCredentialManager.CredentialRevoked(id, issuerA, worker, SAFETY_BREACH, uint64(block.timestamp));
+        emit SiteCredentialManager.CredentialRevoked(
+            id, address(orgA), worker, issuerA, SAFETY_BREACH, uint64(block.timestamp)
+        );
 
         vm.prank(issuerA);
         manager.revokeCredential(id, SAFETY_BREACH);
@@ -196,13 +225,36 @@ contract SiteCredentialManagerTest is Test {
         assertTrue(v.isRevoked);
         assertEq(uint8(v.status), uint8(SiteCredentialManager.CredentialStatus.REVOKED));
         assertEq(v.revokedAt, block.timestamp);
+        assertEq(v.revokedBy, issuerA);
         assertEq(v.revocationReason, SAFETY_BREACH);
         // Original data is preserved for auditability.
-        assertEq(v.issuer, issuerA);
+        assertEq(v.issuer, address(orgA));
+        assertEq(v.signer, issuerA);
         assertEq(v.holder, worker);
         assertEq(v.documentHash, DOC_HASH);
         assertEq(v.credentialType, TYPE_PR1);
         assertEq(manager.getCredentialsByHolder(worker).length, 1);
+    }
+
+    function test_Scenario3_AnyMemberOfTheOrganizationCanRevoke() public {
+        bytes32 id = _issue(issuerA, DOC_HASH, 0);
+        vm.prank(issuerA2);
+        manager.revokeCredential(id, MEDICAL_UNFIT);
+
+        SiteCredentialManager.CredentialView memory v = manager.verifyCredential(id);
+        assertTrue(v.isRevoked);
+        assertEq(v.signer, issuerA);
+        assertEq(v.revokedBy, issuerA2);
+    }
+
+    function test_Scenario3_CredentialStaysRevocableAfterItsSignerLeft() public {
+        bytes32 id = _issue(issuerA, DOC_HASH, 0);
+        vm.prank(issuerA);
+        orgA.leave();
+
+        vm.prank(issuerA2);
+        manager.revokeCredential(id, FRAUDULENT_ISSUANCE);
+        assertTrue(manager.verifyCredential(id).isRevoked);
     }
 
     function test_Scenario3_AllReasonCodesAreAccepted() public {
@@ -215,10 +267,9 @@ contract SiteCredentialManagerTest is Test {
         }
     }
 
-    function test_Scenario3_SuspendedIssuerCanStillRevoke() public {
+    function test_Scenario3_SuspendedOrganizationCanStillRevoke() public {
         bytes32 id = _issue(issuerB, DOC_HASH, 0);
-        vm.prank(admin);
-        registry.suspendIssuer(issuerB);
+        _suspendB();
 
         vm.prank(issuerB);
         manager.revokeCredential(id, FRAUDULENT_ISSUANCE);
@@ -226,10 +277,10 @@ contract SiteCredentialManagerTest is Test {
     }
 
     // ==================================================================
-    // SCENARIO 4 - Revocation by a third-party issuer or attacker reverts
+    // SCENARIO 4 - Revocation by anyone outside the organization reverts
     // ==================================================================
 
-    function test_Scenario4_RevertWhen_OtherIssuerRevokes() public {
+    function test_Scenario4_RevertWhen_OtherOrganizationRevokes() public {
         bytes32 id = _issue(issuerA, DOC_HASH, 0);
 
         vm.prank(issuerB);
@@ -247,11 +298,16 @@ contract SiteCredentialManagerTest is Test {
         assertTrue(manager.isCredentialValid(id));
     }
 
-    function test_Scenario4_RevertWhen_RegistryAdminOrHolderRevokes() public {
+    function test_Scenario4_RevertWhen_AdminContractOrHolderRevokes() public {
         bytes32 id = _issue(issuerA, DOC_HASH, 0);
 
-        vm.prank(admin);
-        vm.expectRevert(abi.encodeWithSelector(SiteCredentialManager.NotCredentialIssuer.selector, id, admin));
+        // Admins govern the organization; only members handle credentials.
+        vm.prank(adminA1);
+        vm.expectRevert(abi.encodeWithSelector(SiteCredentialManager.NotCredentialIssuer.selector, id, adminA1));
+        manager.revokeCredential(id, SAFETY_BREACH);
+
+        vm.prank(address(orgA));
+        vm.expectRevert(abi.encodeWithSelector(SiteCredentialManager.NotCredentialIssuer.selector, id, address(orgA)));
         manager.revokeCredential(id, SAFETY_BREACH);
 
         vm.prank(worker);
@@ -259,8 +315,17 @@ contract SiteCredentialManagerTest is Test {
         manager.revokeCredential(id, SAFETY_BREACH);
     }
 
-    function testFuzz_Scenario4_OnlyOriginalIssuerCanRevoke(address caller) public {
-        vm.assume(caller != issuerA);
+    function test_Scenario4_RevertWhen_FormerMemberRevokes() public {
+        bytes32 id = _issue(issuerA2, DOC_HASH, 0);
+        _orgRun(orgA, Organization.Action.REMOVE_MEMBER, issuerA2, 0);
+
+        vm.prank(issuerA2);
+        vm.expectRevert(abi.encodeWithSelector(SiteCredentialManager.NotCredentialIssuer.selector, id, issuerA2));
+        manager.revokeCredential(id, SAFETY_BREACH);
+    }
+
+    function testFuzz_Scenario4_OnlyMembersOfTheIssuingOrganizationCanRevoke(address caller) public {
+        vm.assume(caller != issuerA && caller != issuerA2);
         bytes32 id = _issue(issuerA, DOC_HASH, 0);
 
         vm.prank(caller);
@@ -270,13 +335,14 @@ contract SiteCredentialManagerTest is Test {
 
     function test_RevertWhen_RevokingTwice() public {
         bytes32 id = _issue(issuerA, DOC_HASH, 0);
-        vm.startPrank(issuerA);
+        vm.prank(issuerA);
         manager.revokeCredential(id, MEDICAL_UNFIT);
+        vm.prank(issuerA2);
         vm.expectRevert(abi.encodeWithSelector(SiteCredentialManager.CredentialAlreadyRevoked.selector, id));
         manager.revokeCredential(id, SAFETY_BREACH);
-        vm.stopPrank();
-        // The first reason is kept.
+        // The first reason and author are kept.
         assertEq(manager.verifyCredential(id).revocationReason, MEDICAL_UNFIT);
+        assertEq(manager.verifyCredential(id).revokedBy, issuerA);
     }
 
     function test_RevertWhen_RevokingUnknownCredential() public {
@@ -305,7 +371,7 @@ contract SiteCredentialManagerTest is Test {
         vm.expectRevert(abi.encodeWithSelector(SiteCredentialManager.CredentialNonTransferable.selector, id));
         manager.transferCredential(id, otherWorker);
 
-        // Even the issuer cannot move it.
+        // Even the issuing organization's members cannot move it.
         vm.prank(issuerA);
         vm.expectRevert(abi.encodeWithSelector(SiteCredentialManager.CredentialNonTransferable.selector, id));
         manager.transferCredential(id, otherWorker);
@@ -344,11 +410,16 @@ contract SiteCredentialManagerTest is Test {
         assertEq(manager.verifyCredential(id).holder, worker);
     }
 
-    function test_Scenario5_ContractRejectsEther() public {
-        vm.deal(worker, 1 ether);
-        vm.prank(worker);
+    function test_Scenario5_ContractsRejectEther() public {
+        vm.deal(worker, 3 wei);
+        vm.startPrank(worker);
         (bool ok,) = address(manager).call{value: 1 wei}("");
         assertFalse(ok);
+        (ok,) = address(registry).call{value: 1 wei}("");
+        assertFalse(ok);
+        (ok,) = address(orgA).call{value: 1 wei}("");
+        assertFalse(ok);
+        vm.stopPrank();
     }
 
     // ==================================================================
@@ -433,20 +504,30 @@ contract SiteCredentialManagerTest is Test {
         assertFalse(manager.isCredentialValid(unknownId));
     }
 
-    function test_SuspendingIssuerInvalidatesItsCredentials() public {
+    function test_SuspendingOrganizationInvalidatesItsCredentials() public {
         bytes32 id = _issue(issuerB, DOC_HASH, 0);
 
-        vm.prank(admin);
-        registry.suspendIssuer(issuerB);
+        _suspendB();
         SiteCredentialManager.CredentialView memory v = manager.verifyCredential(id);
         assertFalse(v.isValid);
         assertFalse(v.issuerActive);
         assertEq(uint8(v.status), uint8(SiteCredentialManager.CredentialStatus.ISSUER_SUSPENDED));
         assertEq(v.issuerName, "Issuer B", "issuer identity is still displayed");
 
-        vm.prank(admin);
-        registry.reinstateIssuer(issuerB);
+        // Reinstated by a new vote of A and C (timelocked).
+        vm.prank(adminA1);
+        uint256 proposal = registry.proposeReinstatement(address(orgB));
+        _orgApprove(orgA, proposal);
+        _orgApprove(orgC, proposal);
+        vm.warp(registry.getProposal(proposal).executableAt);
+        registry.execute(proposal);
         assertTrue(manager.isCredentialValid(id));
+    }
+
+    function test_RemovingTheSignerDoesNotInvalidateItsCredentials() public {
+        bytes32 id = _issue(issuerA2, DOC_HASH, 0);
+        _orgRun(orgA, Organization.Action.REMOVE_MEMBER, issuerA2, 0);
+        assertTrue(manager.isCredentialValid(id), "the credential belongs to the organization");
     }
 
     function test_BatchVerification() public {
@@ -467,10 +548,10 @@ contract SiteCredentialManagerTest is Test {
         assertEq(uint8(results[2].status), uint8(SiteCredentialManager.CredentialStatus.UNKNOWN));
     }
 
-    function test_CredentialIdIsBoundToChainContractIssuerAndDocument() public view {
-        bytes32 id = manager.computeCredentialId(issuerA, DOC_HASH);
-        assertEq(id, keccak256(abi.encode(block.chainid, address(manager), issuerA, DOC_HASH)));
-        assertTrue(id != manager.computeCredentialId(issuerB, DOC_HASH));
-        assertTrue(id != manager.computeCredentialId(issuerA, DOC_HASH_2));
+    function test_CredentialIdIsBoundToChainContractOrganizationAndDocument() public view {
+        bytes32 id = manager.computeCredentialId(address(orgA), DOC_HASH);
+        assertEq(id, keccak256(abi.encode(block.chainid, address(manager), address(orgA), DOC_HASH)));
+        assertTrue(id != manager.computeCredentialId(address(orgB), DOC_HASH));
+        assertTrue(id != manager.computeCredentialId(address(orgA), DOC_HASH_2));
     }
 }

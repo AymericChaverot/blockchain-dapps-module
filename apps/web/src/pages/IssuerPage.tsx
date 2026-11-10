@@ -64,35 +64,23 @@ import { siteCredentialManagerAbi } from "@/config/abis";
 import { useAppMode } from "@/config/mode";
 import { chain, explorerAddressUrl, explorerTxUrl, isConfigured, requireContracts } from "@/config/network";
 import { useContractAction } from "@/hooks/useContractAction";
-import {
-  type CredentialView,
-  credentialTypeInfo,
-  fetchCredential,
-  fetchIssuer,
-  fetchIssuerCredentials,
-} from "@/lib/credentials";
+import { useRoles } from "@/hooks/useRoles";
+import { type CredentialView, credentialTypeInfo, fetchCredential, fetchIssuerCredentials } from "@/lib/credentials";
 import { addMonths, downloadTextFile, formatDate, toDateInputValue } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-function useIssuer(address: Address | undefined) {
-  return useQuery({
-    queryKey: ["issuer", address],
-    queryFn: () => fetchIssuer(address as Address),
-    enabled: isConfigured && !!address,
-  });
-}
-
-/** Warning for a registered but suspended issuer (both modes). */
-function SuspendedNotice({ address }: { address: Address }) {
-  const { data } = useIssuer(address);
-  if (!data?.registered || data.active) return null;
+/** Warning for a member of a suspended (or not yet admitted) organization (both modes). */
+function SuspendedNotice() {
+  const roles = useRoles();
+  if (!roles.isIssuer || roles.organizationActive) return null;
   return (
     <Alert variant="warning">
       <AlertTriangleIcon />
-      <AlertTitle>Your organization's accreditation is suspended</AlertTitle>
+      <AlertTitle>{roles.organization?.name} is not accredited right now</AlertTitle>
       <AlertDescription>
-        New issuances are rejected by the contract and your existing credentials show as "Issuer suspended" to
-        verifiers. You can still revoke credentials. Contact the registry administrators.
+        New issuances are rejected by the contract and the credentials of your organization show as "Issuer
+        suspended" to verifiers. You can still revoke credentials. Another organization can propose its reinstatement
+        in Federation governance.
       </AlertDescription>
     </Alert>
   );
@@ -189,7 +177,21 @@ function FormSection({ icon, title, description, children }: { icon: ReactNode; 
   );
 }
 
-function IssueForm({ issuer, issuerName, issuerDomain }: { issuer: Address; issuerName: string; issuerDomain: string }) {
+/**
+ * @param issuer The organization (contract) the credential is issued by.
+ * @param signer The connected member signing the issuance.
+ */
+function IssueForm({
+  issuer,
+  signer,
+  issuerName,
+  issuerDomain,
+}: {
+  issuer: Address;
+  signer: Address;
+  issuerName: string;
+  issuerDomain: string;
+}) {
   const [form, setForm] = useState<FormState>(initialForm);
   const [salt, setSalt] = useState<Hex>(randomBytes32);
   const [validFrom] = useState(() => {
@@ -210,7 +212,7 @@ function IssueForm({ issuer, issuerName, issuerDomain }: { issuer: Address; issu
     return buildCredentialDocument({
       chainId: chain.id,
       manager: requireContracts().siteCredentialManager,
-      issuer: { address: issuer, name: issuerName || "Unregistered issuer", domain: issuerDomain || "" },
+      issuer: { address: issuer, name: issuerName || "Unregistered issuer", domain: issuerDomain || "", signer },
       holder: {
         address: getAddress(form.holderAddress.trim()),
         firstName: form.firstName,
@@ -229,7 +231,7 @@ function IssueForm({ issuer, issuerName, issuerDomain }: { issuer: Address; issu
       validUntil: expiryDate(form),
       salt,
     });
-  }, [form, holderValid, issuer, issuerName, issuerDomain, salt, validFrom]);
+  }, [form, holderValid, issuer, signer, issuerName, issuerDomain, salt, validFrom]);
 
   // Live SHA-256 preview, computed locally.
   useEffect(() => {
@@ -555,7 +557,7 @@ function RevokeById() {
         </CardTitle>
         <CardDescription>
           Demo tool: paste the ID of a credential issued by another organization to show that the contract refuses
-          (<code>NotCredentialIssuer</code>).
+          (<code>NotCredentialIssuer</code>). A colleague from the same organization, on the other hand, can revoke it.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-2">
@@ -578,7 +580,7 @@ function RevokeById() {
         {credential && !credential.exists && <p className="text-muted-foreground text-sm">Unknown credential.</p>}
         {credential?.exists && (
           <p className="text-muted-foreground text-xs">
-            Issued by {credential.issuerName} ({credential.issuer})
+            Issued by {credential.issuerName} ({credential.issuer}), signed by {credential.signer}
           </p>
         )}
       </CardContent>
@@ -664,6 +666,7 @@ function CredentialsTable({ credentials }: { credentials: CredentialView[] }) {
               <th className="px-4 py-2.5 font-medium">Clearance</th>
               <th className="px-4 py-2.5 font-medium">Status</th>
               <th className="px-4 py-2.5 font-medium">Holder</th>
+              <th className="px-4 py-2.5 font-medium">Signed by</th>
               <th className="px-4 py-2.5 font-medium">Issued</th>
               <th className="px-4 py-2.5 font-medium">Expires</th>
               <th className="px-4 py-2.5 text-right font-medium">Actions</th>
@@ -672,7 +675,7 @@ function CredentialsTable({ credentials }: { credentials: CredentialView[] }) {
           <tbody className="divide-y">
             {rows.length === 0 && (
               <tr>
-                <td colSpan={6} className="text-muted-foreground px-4 py-8 text-center">
+                <td colSpan={7} className="text-muted-foreground px-4 py-8 text-center">
                   No credential matches these filters.
                 </td>
               </tr>
@@ -692,6 +695,9 @@ function CredentialsTable({ credentials }: { credentials: CredentialView[] }) {
                   </td>
                   <td className="px-4 py-3">
                     <HexValue value={credential.holder} href={explorerAddressUrl(credential.holder)} />
+                  </td>
+                  <td className="px-4 py-3">
+                    <HexValue value={credential.signer} href={explorerAddressUrl(credential.signer)} />
                   </td>
                   <td className="tabular px-4 py-3 whitespace-nowrap">{formatDate(credential.issuedAt)}</td>
                   <td className="tabular px-4 py-3 whitespace-nowrap">
@@ -713,23 +719,25 @@ function CredentialsTable({ credentials }: { credentials: CredentialView[] }) {
 export function IssuerOverviewPage() {
   const { address } = useAccount();
   const { isDemo } = useAppMode();
-  const { data: issuer, isLoading: loadingIssuer } = useIssuer(address);
+  const roles = useRoles();
+  const organization = roles.isIssuer ? roles.organization : undefined;
   const { data: credentials, isLoading } = useQuery({
-    queryKey: ["issuer-credentials", address],
-    queryFn: () => fetchIssuerCredentials(address as Address),
-    enabled: isConfigured && !!address,
+    queryKey: ["issuer-credentials", organization?.address],
+    queryFn: () => fetchIssuerCredentials(organization?.address as Address),
+    enabled: isConfigured && !!organization,
   });
 
   if (!address) return null;
   const list = credentials ?? [];
   const count = (filter: StatusFilter) => list.filter((credential) => matchesFilter(credential, filter)).length;
+  const loading = !!organization && isLoading;
 
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
         eyebrow="Training organization"
-        title={issuer?.registered ? issuer.name : "Issuer workspace"}
-        description="Issue non-transferable safety clearances to workers and revoke them when needed. Only the original issuer can revoke a credential."
+        title={organization ? organization.name : "Issuer workspace"}
+        description="Issue non-transferable safety clearances on behalf of your organization and revoke them when needed. Any issuing member of the organization can revoke any of its credentials."
         actions={
           <Button asChild>
             <Link to="/issuer/new">
@@ -741,29 +749,41 @@ export function IssuerOverviewPage() {
 
       <Card className="py-4">
         <CardContent className="flex flex-wrap items-center justify-between gap-3">
-          {loadingIssuer ? (
+          {roles.isLoading ? (
             <Loader2Icon className="size-5 animate-spin" />
-          ) : issuer?.registered ? (
-            <IssuerIdentity name={issuer.name} domain={issuer.domain} address={address} active={issuer.active} />
+          ) : organization ? (
+            <IssuerIdentity
+              name={organization.name}
+              domain={organization.domain}
+              address={organization.address}
+              active={roles.organizationActive}
+            />
           ) : (
-            <span className="font-semibold">Unregistered address</span>
+            <span className="font-semibold">Not an issuing member of any organization</span>
           )}
-          <HexValue value={address} href={explorerAddressUrl(address)} />
+          <span className="text-muted-foreground flex flex-wrap items-center gap-2 text-xs">
+            {organization && (
+              <>
+                Organization <HexValue value={organization.address} href={explorerAddressUrl(organization.address)} />
+              </>
+            )}
+            You <HexValue value={address} href={explorerAddressUrl(address)} />
+          </span>
         </CardContent>
       </Card>
 
-      <SuspendedNotice address={address} />
+      <SuspendedNotice />
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <StatTile label="Issued" value={isLoading ? "–" : list.length} icon={<FileStackIcon />} />
-        <StatTile label="Valid" value={isLoading ? "–" : count("valid")} icon={<CircleCheckIcon />} tone="success" />
-        <StatTile label="Revoked" value={isLoading ? "–" : count("revoked")} icon={<CircleSlashIcon />} tone="danger" />
-        <StatTile label="Expired" value={isLoading ? "–" : count("expired")} icon={<ClockAlertIcon />} tone="warning" />
+        <StatTile label="Issued" value={loading ? "–" : list.length} icon={<FileStackIcon />} />
+        <StatTile label="Valid" value={loading ? "–" : count("valid")} icon={<CircleCheckIcon />} tone="success" />
+        <StatTile label="Revoked" value={loading ? "–" : count("revoked")} icon={<CircleSlashIcon />} tone="danger" />
+        <StatTile label="Expired" value={loading ? "–" : count("expired")} icon={<ClockAlertIcon />} tone="warning" />
       </div>
 
       <section className="flex flex-col gap-3">
-        <h2 className="text-lg font-semibold">Issued credentials</h2>
-        {isLoading ? (
+        <h2 className="text-lg font-semibold">Credentials issued by the organization</h2>
+        {loading ? (
           <Loader2Icon className="text-muted-foreground mx-auto size-6 animate-spin" />
         ) : list.length === 0 ? (
           <EmptyState icon={<FileStackIcon />} title="No credential issued yet">
@@ -781,8 +801,10 @@ export function IssuerOverviewPage() {
 
 export function IssuePage() {
   const { address } = useAccount();
-  const { data: issuer } = useIssuer(address);
+  const roles = useRoles();
   if (!address) return null;
+  // Demo mode lets a non-member open the form: the contract then rejects the issuance.
+  const organization = roles.isIssuer ? roles.organization : undefined;
 
   return (
     <div className="flex flex-col gap-6">
@@ -798,12 +820,13 @@ export function IssuePage() {
         title="Issue a safety clearance"
         description="The transaction only carries the worker's wallet, the clearance code, the expiry date and the certificate fingerprint. Personal data stays in the certificate file handed to the worker."
       />
-      <SuspendedNotice address={address} />
+      <SuspendedNotice />
       <IssueForm
-        key={address}
-        issuer={address}
-        issuerName={issuer?.name ?? ""}
-        issuerDomain={issuer?.domain ?? ""}
+        key={`${address}-${organization?.address ?? "none"}`}
+        issuer={organization?.address ?? address}
+        signer={address}
+        issuerName={organization?.name ?? ""}
+        issuerDomain={organization?.domain ?? ""}
       />
     </div>
   );

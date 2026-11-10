@@ -24,11 +24,16 @@ export interface CredentialDocument {
   "@context": string[];
   type: string[];
   schemaVersion: typeof DOCUMENT_SCHEMA_VERSION;
+  /**
+   * Issuing organization: `address` is its Organization contract (its
+   * permanent identity), `signer` the member (person) who issued it.
+   */
   issuer: {
     id: string;
     address: Address;
     name: string;
     domain: string;
+    signer?: Address;
   };
   validFrom: string;
   validUntil?: string;
@@ -61,7 +66,8 @@ export interface CredentialDocument {
 export interface BuildCredentialDocumentInput {
   chainId: number;
   manager: Address;
-  issuer: { address: Address; name: string; domain: string };
+  /** `address`: the organization contract; `signer`: the member issuing it. */
+  issuer: { address: Address; name: string; domain: string; signer?: Address };
   holder: {
     address: Address;
     firstName: string;
@@ -97,6 +103,7 @@ export function buildCredentialDocument(input: BuildCredentialDocumentInput): Cr
       address: input.issuer.address,
       name: input.issuer.name,
       domain: input.issuer.domain,
+      ...(input.issuer.signer ? { signer: input.issuer.signer } : {}),
     },
     validFrom: input.validFrom.toISOString(),
     ...(input.validUntil ? { validUntil: input.validUntil.toISOString() } : {}),

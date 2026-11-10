@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 
 const CONTRACTS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const OUTPUT = path.resolve(CONTRACTS_DIR, "../../apps/web/src/config/abis.ts");
-const CONTRACTS = ["IssuerRegistry", "SiteCredentialManager"] as const;
+const CONTRACTS = ["IssuerRegistry", "Organization", "SiteCredentialManager"] as const;
 
 export function exportAbis(): void {
   const sections = CONTRACTS.map((name) => {

@@ -1,4 +1,3 @@
-import { useQuery } from "@tanstack/react-query";
 import {
   AlertTriangleIcon,
   CheckIcon,
@@ -30,10 +29,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { type Persona, buildPersonas, useDemoSeed } from "@/config/demo";
 import { useAppMode } from "@/config/mode";
-import { chain, explorerAddressUrl, isConfigured, networkLabel } from "@/config/network";
+import { chain, explorerAddressUrl, networkLabel } from "@/config/network";
 import { useRoles } from "@/hooks/useRoles";
 import { copyWithToast } from "@/lib/clipboard";
-import { fetchRegistryOverview } from "@/lib/credentials";
 import { DEMO_CONNECTOR_ID, switchDemoAccount } from "@/lib/demoWallet";
 import { shortHex } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -63,12 +61,11 @@ function useWalletConnectors() {
   };
 }
 
-/** Personas of the demo, with the registry owner as admin. */
+/** Personas of the demo: people of the founding organizations, a candidate, a worker. */
 export function usePersonas(): Persona[] {
   const { isDemo } = useAppMode();
   const seed = useDemoSeed(isDemo);
-  const registry = useQuery({ queryKey: ["registry"], queryFn: fetchRegistryOverview, enabled: isConfigured && isDemo });
-  return isDemo ? buildPersonas(seed.data, registry.data?.owner) : [];
+  return isDemo ? buildPersonas(seed.data) : [];
 }
 
 /** Connects the built-in demo wallet as `persona` (switching connector if needed). */
@@ -233,7 +230,7 @@ export function AccountMenu() {
             <AddressAvatar address={address} />
             <span className="hidden flex-col leading-tight sm:flex">
               <span className="font-mono text-xs font-medium">{shortHex(address)}</span>
-              <span className="text-muted-foreground text-[11px]">{roles.issuerName ?? roles.primaryRole}</span>
+              <span className="text-muted-foreground text-[11px]">{roles.organization ? `${roles.primaryRole} · ${roles.organization.name}` : roles.primaryRole}</span>
             </span>
             <ChevronDownIcon className="text-muted-foreground size-3.5" />
           </button>
@@ -247,10 +244,16 @@ export function AccountMenu() {
             </div>
           </div>
           <div className="flex flex-wrap gap-1 px-2 pb-2">
-            {roles.isAdmin && <Badge variant="info">Registry admin</Badge>}
+            {roles.organization && (
+              <Badge variant={roles.organizationActive ? "info" : "suspended"}>
+                {roles.organization.name}
+                {roles.organizationActive ? "" : " (not accredited)"}
+              </Badge>
+            )}
+            {roles.isOrgAdmin && <Badge variant="info">Organization admin</Badge>}
             {roles.isIssuer && (
               <Badge variant={roles.isActiveIssuer ? "success" : "suspended"}>
-                {roles.isActiveIssuer ? "Accredited issuer" : "Suspended issuer"}
+                {roles.isActiveIssuer ? "Issuing member" : "Issuing member (suspended)"}
               </Badge>
             )}
             <Badge variant="muted">Worker</Badge>
